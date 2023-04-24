@@ -10,7 +10,6 @@ the idea was brilliant.:+1:
 Because we don't need any other script interpreter than bash.
 
 But this script was using the GeoIP database from [db-ip.com](https//db-ip.com).
-
 And I wasn't happy for that for several reasons.
 1. I already use the free [Maxmind GeoIP database](https://maxmind.com) with nginx
 2. I prefer the [Maxmind GeoIP database](https://maxmind.com). 
@@ -36,7 +35,11 @@ In a near future I plan to add some new features, like the following ones :
 * Setup the nft rules.
 * And other ideas that will come when the scrtip evolves.
 
-## What is expected from you.
-Please use this script. Comment, improve and share your ideas.
-Thanks for your help.
+## What do I expect from you :grey_question:.
+* Test this script. 
+* Comment, improve it 
+* Share your ideas.
+* Fork this repository
+* Add a Star to this repository
+Thanks for your help.:pray:
  
