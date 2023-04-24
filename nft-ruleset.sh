@@ -22,21 +22,22 @@ MaxMindKey="<Put_Your_Key_Here>"
 # Filename of this script.
 ScriptName=`basename "$0"`
 # Semantic version number of this script.
-ScriptNameVersion="v0.0.9"
+ScriptNameVersion="v0.0.10"
 # User configuration file.
 geo_conf="/etc/$ScriptName.conf"
 # Error log filename. This file logs errors in addition to the systemd Journal.
 LogFile="/var/log/$ScriptName.log"
 # Download URL.
 MaxMindDonwloadZipUrl="https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country-CSV&license_key=$MaxMindKey&suffix=zip"
+#Checksum File
+MMCheckSumFile="https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country-CSV&license_key=$MaxMindKey&suffix=zip.sha256"
 # Current date/time.
-DateTime="$(date +"%Y-%m-%d %H:%M:%S")"
+DateTime="$(date +"%d/%m/%Y %H:%M:%S")"
 
 # Files to remove once the archive has been extracted.
 FilesToDelete="COPYRIGHT.txt,LICENSE.txt,GeoLite2-Country-Locations-zh-CN.csv,GeoLite2-Country-Locations-fr.csv,GeoLite2-Country-Locations-es.csv,GeoLite2-Country-Locations-de.csv,GeoLite2-Country-Locations-pt-BR.csv,GeoLite2-Country-Locations-ja.csv,GeoLite2-Country-Locations-ru.csv"
 
 #Date of Database donwload
-datedbdown="$(date +"%Y%m%d")"
 
 # Ramdisk System MountPoint
 RamDiskMountPoint="/tmp/RamDisk"
@@ -53,6 +54,7 @@ Sort=`which sort`
 Grep=`which grep`
 Wget=`which wget`
 Mount=`which mount`
+ShaCheck=`which sha256sum`
 
 Checks () {
 #1. Checks if user is allowed to use sudo without interaction.
@@ -71,9 +73,10 @@ if [ ! -f $LogFile ]; then
 	fi
 	else
 	sudo echo "------------- [ On $DateTime $ScriptName has found an existing $LogFile, launch a rotate process ]------------" >>$LogFile
-	sudo echo "---> [ STEP 01 Initial checks ]------------" >>$LogFile
+	
 	#Put the LogRotate command here
 fi
+sudo echo "---> [ STEP 01 Initial checks ]------------" >>$LogFile
 #3. Checks if used programms are accessible with this user privilege
 if [ -x $Mount ]; then
 	echo "$Mount can be launched with this $User account" >>$LogFile
@@ -81,38 +84,51 @@ if [ -x $Mount ]; then
 	sudo echo "Unable to find $Mount or $User isn't allowed to launch it" >>$LogFile
 	exit 1
 fi
+
 if [ -x $Unzip ]; then
 	sudo echo "$Unzip can be launched with this $User account" >>$LogFile
 	else
 	sudo echo "Unable to find $Unzip or $User isn't allowed to launch it" >>$LogFile
 	exit 1
 fi
+
 if [ -x $Join ]; then
 	sudo echo "$Join can be launched with this $User account" >>$LogFile
 	else
 	sudo echo "Unable to find $Join or $User isn't allowed to launch it" >>$LogFile
 	exit 1
 fi
+
 if [ -x $Sort ]; then
 	echo "$Sort can be launched with this $User account" >>$LogFile
 	else
 	echo "Unable to find $Sort or $User isn't allowed to launch it" >>$LogFile
 	exit 1
 fi
+
 if [ -x $Grep ]; then
 	echo "$Grep can be launched with this $User account" >>$LogFile
 	else
 	echo "Unable to find $Grep or $User isn't allowed to launch it" >>$LogFile
 	exit 1
 fi
+
 if [ -x $Wget ]; then
 	echo "$Wget can be launched with this $User account" >>$LogFile
 	else
 	echo "Unable to find $Wget or $User isn't allowed to launch it" >>$LogFile
 	exit 1
 fi
+
+if [ -x $ShaCheck ]; then
+	echo "$ShaCheck can be launched with this $User account" >>$LogFile
+	else
+	echo "Unable to find $ShaCheck or $User isn't allowed to launch it" >>$LogFile
+	exit 1
+fi
+
 #4 Create RamDisk
-sudo mountpoint $RamDiskMountPoint
+sudo mountpoint -q $RamDiskMountPoint
 if [ $? -ne 0 ]; then
 sudo mkdir $RamDiskMountPoint
 if [ -d $RamDiskMountPoint ]; then echo "$ScriptName is able create a RamDisk mountpoint in $RamDiskMountPoint" >> $LogFile; else echo "unable to create mounting point in $RamDiskMountPoint">> $LogFile; fi
@@ -133,6 +149,7 @@ sudo touch $TmpDir/TstFile.out
 sudo rm $TmpDir/TstFile.out
 	if [ $? -eq 0 ]; then echo "$ScriptName is also able to delete files in $TmpDir" >> $LogFile; fi
 fi
+
 if [ -d $DbDir ]; then
 sudo touch $DbDir/TstFile.out
 	if [ $? -eq 0 ]; then echo "$ScriptName is able to write files in $DbDir" >> $LogFile; fi
@@ -150,7 +167,8 @@ sudo rm -rf $RamDiskMountPoint >>$LogFile
 DownloadDb() {
 #Date of Database donwload
 DateDbDown="$(date +"%Y%m%d")-MaxMindDb.zip"
-if [ ! -s "$TmpDir/$DateDbDown" ]; then
+DateCheckDown="$(date +"%Y%m%d")-SHA256Sum.txt"
+if [ ! -s "$TmpDir/$DateDbDown" ] && [ ! -s "$TmpDir/$DateCheckDown" ] ; then
 	sudo echo "---> [ STEP 02 Download Database ]------------" >>$LogFile
 	sudo echo "Downloading MaxMind database GeoLite2-Country from https://maxmind.com." >>$LogFile
 	if [ "$silent" = "yes" ]; then
@@ -159,31 +177,55 @@ if [ ! -s "$TmpDir/$DateDbDown" ]; then
 				echo "Failed to download $MaxMindDonwloadZipUrl. Exiting..." >>$LogFile
 				exit 1
 			fi
+		$Wget -q -a $LogFile -O $TmpDir/$DateCheckDown $MMCheckSumFile
+			if [ $? -ne 0 ]; then
+				echo "Failed to download $MMCheckSumFile. Exiting..." >>$LogFile
+				exit 1
+			fi	
 	else
 		$Wget -nv -a $LogFile -O $TmpDir/$DateDbDown $MaxMindDonwloadZipUrl
 			if [ $? -ne 0 ]; then
 				echo "Failed to download $MaxMindDonwloadZipUrl. Exiting..." >>$LogFile
 				exit 1
 			fi
+		$Wget -nv -a $LogFile -O $TmpDir/$DateCheckDown $MMCheckSumFile
+			if [ $? -ne 0 ]; then
+				echo "Failed to download $MMCheckSumFile. Exiting..." >>$LogFile
+				exit 1
+			fi	
 	fi
 else
 sudo echo "---> [ STEP 02 Database Already exists download canceled ]------------" >>$LogFile
-sudo echo -e "The database has already been downloaded today the file exists; using existing file:\n$TmpDir/$DateDbDown" >>$LogFile
+sudo echo -e "The database has already been downloaded today\nUsing existing file : $TmpDir/$DateDbDown" >>$LogFile
+sudo echo -e "The SHA256 Checksum File has already been downloaded today\nUsing existing file : $TmpDir/$DateCheckDown" >>$LogFile
 fi
-# Launch archive extraction
-ExtarctArchive
+}
+
+Check256sums () {
+sudo echo "---> [ STEP 03 Compare checksums ]------------" >>$LogFile
+local DownloadedSum=`cut -d' ' -f1  $TmpDir/$DateCheckDown`
+local SumCompute=`$ShaCheck $TmpDir/$DateDbDown | awk '{print $1}'`
+if [ $DownloadedSum != $SumCompute ]; then
+	sudo echo "Downloaded File checksumms differs" >>$LogFile
+	sudo -e echo "Checksum of : $TmpDir/$DateDbDown :\n$SumCompute" >>$LogFile
+	sudo -e echo "Checksum of : $TmpDir/$DateCheckDown :\n$DownloadedSum" >>$LogFile
+	exit 1
+else
+sudo echo "Files checksumms are correct : $DownloadedSum" >>$LogFile
+fi
+
 }
 
 ExtarctArchive() {
-sudo echo "---> [ STEP 03 Archive extraction ]------------" >>$LogFile
+sudo echo "---> [ STEP 04 Archive extraction ]------------" >>$LogFile
 	if [ -s "$TmpDir/$DateDbDown" ]; then
 		cd $TmpDir
 			if [ $? -ne 0 ]; then
 				echo "Unable to access the $TmpDir" >>$LogFile
 				exit 1
 			fi
-		echo "Extract archive named $DateDbDown in $TmpDir" >>$LogFile
-			$Unzip -j -o "$TmpDir/$DateDbDown"
+		echo "Extract archive files from : $DateDbDown in $TmpDir" >>$LogFile
+			$Unzip -j -o "$TmpDir/$DateDbDown">>$LogFile
 			if [ $? -ne 0 ] || [ ! -s "$DateDbDown" ]; then
 				echo "Unable to extract archive" >> $LogFile
 				exit 1
@@ -200,7 +242,7 @@ sudo echo "---> [ STEP 03 Archive extraction ]------------" >>$LogFile
 }
 
 SortingCleaningFiles() {
-sudo echo "---> [ STEP 04 Transform all files, Ordering and Filtering ]------------" >>$LogFile
+sudo echo "---> [ STEP 05 Transform all files, Ordering and Filtering ]------------" >>$LogFile
 MaxmindDownloadedDb="MaxMindDb.zip"
 MaxMindLocation="GeoLite2-Country-Locations-en.csv"
 MaxMindIPv6Block="GeoLite2-Country-Blocks-IPv6.csv"
@@ -230,8 +272,9 @@ while IFS=, read -r CountryCode Subnet ; do
     echo "$Subnet" >> "$TmpDir/$CountryCode".nft4
 done < $FilteredIPv4List
 }
+
 SelectCountriesList () {
-sudo echo "---> [ STEP 04 Select list of countries ]------------" >>$LogFile
+sudo echo "---> [ STEP 06 Select list of countries ]------------" >>$LogFile
 DestDir=$TmpDir"/DestTempDir"
 mkdir -p $DestDir
 IFS=',' read -ra array <<<"$AllowedCountriesList"
@@ -245,10 +288,10 @@ done
 }
 
 InsertCommas () {
-sudo echo "---> [ STEP 05 Insert commas and join lines of files located in $DestDir ]------------" >>$LogFile
+sudo echo "---> [ STEP 07 Insert commas and join lines of files located in $DestDir ]------------" >>$LogFile
 shopt -s nullglob
 # create an array with all the filer/dir inside ~/myDir
-sudo echo "---> [ STEP 05a modify IPv4 files ]------------" >>$LogFile
+sudo echo "---> [ STEP 07a modify IPv4 files ]------------" >>$LogFile
 # rm -v "$TmpDir"/*.nft4>>$LogFile
 rm "$TmpDir"/*.nft4
 Array=($DestDir/*.nft4)
@@ -263,7 +306,7 @@ for ((i=0; i<${#Array[@]}; i++)); do
 	sed -i -e 'N;s/\n//' "$TmpDir/$FileName"
 #	rm -v ${Array[$i]} >>$LogFile
 done
-sudo echo "---> [ STEP 05b modify IPv6 files ]------------" >>$LogFile
+sudo echo "---> [ STEP 07b modify IPv6 files ]------------" >>$LogFile
 # rm -v "$TmpDir"/*.nft6>>$LogFile
 rm "$TmpDir"/*.nft6
 Array=($DestDir/*.nft6)
@@ -288,29 +331,40 @@ rm -rf $DestDir
 }
 
 ArchiveFiles () {
-sudo echo "---> [ STEP 06 archive files ]------------" >>$LogFile
-
+DateArchiveFile="$(date +"%Y%m%d")-ScriptName-rulesets.tar.gz"
+cd $TmpDir
+sudo echo "---> [ STEP 08 archive the following files in $DbDir/$DateArchiveFile ]------------" >>$LogFile
+if [ ! -d $DbDir ]; then 
+	mkdir -pv $DbDir >>$LogFile
+else 
+	echo "Directory $DbDir already exists">>$LogFile
+fi
+tar czvf $DbDir/$DateArchiveFile *.nft*>>$LogFile
 }
 
 MainProg() {
 # Start a timer for the script run time.
-	local starttime=$(date +%s)
+local StartTime=$(date +%s)
 #Run Checks procedure
 Checks
 #Run DownloadDb procedure (Download database if necesary) and extracts files if database exists
 DownloadDb
+# Checks the SHA256 sums of downloaded file and the one computed
+Check256sums
+# Launch archive extraction
+ExtarctArchive
 #Sort and clean files
 SortingCleaningFiles
 #Select Countries according to the AllowedCountriesList variables
 SelectCountriesList
 #Insert commas and join lines
-InsertCommas 
+InsertCommas
+#Archive files
+ArchiveFiles 
 #Cleanup all the mess
 # Cleanup
-
-
 # Display the script run time.
-echo "Script run time : $(($(date +%s) - $starttime))s">>$LogFile	
+echo "Script run time : $(($(date +%s) - $StartTime))s">>$LogFile	
 }
 
 MainProg "$@"
