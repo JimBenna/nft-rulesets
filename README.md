@@ -9,7 +9,7 @@ the idea was brilliant.:+1:
 
 Because we don't need any other script interpreter than bash.
 
-But this script was using the GeoIP database from [db-ip.com](https//db-ip.com).
+But this script was using the GeoIP database from [db-ip.com](https://db-ip.com).
 And I wasn't happy for that for several reasons.
 1. I already use the free [Maxmind GeoIP database](https://maxmind.com) with nginx
 2. I prefer the [Maxmind GeoIP database](https://maxmind.com). 
