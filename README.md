@@ -12,10 +12,11 @@ And I wasn't happy for that for several reasons.
 I believe that it's one of the most accurate one, and all subnets are written in CIDR mode, and I personnally think it's clearer, this way
 
 ## Description
-:penguin:What this script is doing ?
-1. Checks that all the programs that its using can be accessed.
+### What this script is doing ? :penguin:
+1. Checks that all the programs that the script use can be accessed.
 2. Create a small RamDrive to store its temporaries files to avoid storing data on HardDisks this increase spead.
 3. Downloads the Maxmind Database GeoLite2-Country in csv format for IPv4 and IPv6.
+and checks that the SHA256 checksumms are correct.
 4. Correlates the data to create files for selected countries. Selected countries have to be mentionned according to their ISO code.
 See this [webpage](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) for further details.
 5. Create an archive files of the selected countries and store them on disk.
