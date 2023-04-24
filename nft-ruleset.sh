@@ -22,7 +22,7 @@ MaxMindKey="<Put_Your_Key_Here>"
 # Filename of this script.
 ScriptName=`basename "$0"`
 # Semantic version number of this script.
-ScriptNameVersion="v0.0.10"
+ScriptNameVersion="v0.0.11"
 # User configuration file.
 geo_conf="/etc/$ScriptName.conf"
 # Error log filename. This file logs errors in addition to the systemd Journal.
@@ -159,6 +159,7 @@ fi
 }
 
 Cleanup () {
+cd /tmp
 sudo umount $RamDiskMountPoint
 if [ $? -eq 0 ]; then echo "The RamDisk has been detached from $RamDiskMountPoint" >> $LogFile; else echo "unable to unmount the RamDisk from $RamDiskMountPoint">> $LogFile; fi
 sudo rm -rf $RamDiskMountPoint >>$LogFile
@@ -230,8 +231,10 @@ sudo echo "---> [ STEP 04 Archive extraction ]------------" >>$LogFile
 				echo "Unable to extract archive" >> $LogFile
 				exit 1
 			else
+				echo "---> [ STEP 04a Remove useless files to save some space on $RamDiskMountPoint ]------------"  >>$LogFile
 				IFS=, read -r -a array <<< "$FilesToDelete"
 				rm -v "${array[@]}" >>$LogFile
+				echo "---> [ STEP 04b Remaing files on $RamDiskMountPoint ]------------"  >>$LogFile
 				ls -lh $TmpDir>>$LogFile
 			fi
 
@@ -362,7 +365,7 @@ InsertCommas
 #Archive files
 ArchiveFiles 
 #Cleanup all the mess
-# Cleanup
+Cleanup
 # Display the script run time.
 echo "Script run time : $(($(date +%s) - $StartTime))s">>$LogFile	
 }
