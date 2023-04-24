@@ -12,7 +12,7 @@ And I wasn't happy for that for several reasons.
 I believe that it's one of the most accurate one, and all subnets are written in CIDR mode, and I personnally think it's clearer, this way
 
 ## Description
-What this script is doing ?
+:penguin:What this script is doing ?
 1. Checks that all the programs that its using can be accessed.
 2. Create a small RamDrive to store its temporaries files to avoid storing data on HardDisks this increase spead.
 3. Downloads the Maxmind Database GeoLite2-Country in csv format for IPv4 and IPv6.
@@ -22,7 +22,7 @@ See this [webpage](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) for further
 6. All steps are well logged and described.
 
 ## Future evolutions.
-As mentioned the script is in his first stage. It hasn't reached a valid number. It's just a working file.
+:gear: As mentioned the script is in his first stage. It hasn't reached a valid number. It's just a working file.
 In a near future I plan to add the following features. 
 * Taking in consideration the parameters defined in a configuration file.
 * Taking in consideration command line arguments
