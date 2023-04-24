@@ -3,7 +3,7 @@
 
 ## Purpose
 Repository to store a script and all details that downloads and prepare GeoIP database to be used with nftables rulesets
-I found an awesome script on the [WireFalls Github](https://github.com/wirefalls/geo-nft). 
+I found an awesome :+1: script on the [WireFalls Github](https://github.com/wirefalls/geo-nft).:wave: 
 the idea was brilliant.
 But this script was using the GeoIP database from [db-ip.com](https//db-ip.com).
 And I wasn't happy for that for several reasons.
