@@ -3,9 +3,14 @@
 
 ## Purpose
 Repository to store a script and all details that downloads and prepare GeoIP database to be used with nftables rulesets
-I found an awesome :+1: script on the [WireFalls Github](https://github.com/wirefalls/geo-nft).:wave: 
-the idea was brilliant.
+I found an awesome script on the [WireFalls Github](https://github.com/wirefalls/geo-nft). :wave: 
+
+the idea was brilliant.:+1:
+
+Because we don't need any other script interpreter than bash.
+
 But this script was using the GeoIP database from [db-ip.com](https//db-ip.com).
+
 And I wasn't happy for that for several reasons.
 1. I already use the free [Maxmind GeoIP database](https://maxmind.com) with nginx
 2. I prefer the [Maxmind GeoIP database](https://maxmind.com). 
@@ -22,9 +27,10 @@ See this [webpage](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) for further
 5. Create an archive files of the selected countries and store them on disk.
 6. All steps are well logged and described.
 
-## Future evolutions.
-:gear: As mentioned the script is in his first stage. It hasn't reached a valid number. It's just a working file.
-In a near future I plan to add the following features. 
+## Future evolutions. :gear:
+The script is at his first stage. It hasn't reached a number to be considered as **stable** enough.
+
+In a near future I plan to add some new features, like the following ones :
 * Taking in consideration the parameters defined in a configuration file.
 * Taking in consideration command line arguments
 * Setup the nft rules.
