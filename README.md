@@ -33,13 +33,14 @@ In a near future I plan to add some new features, like the following ones :
 * Taking in consideration the parameters defined in a configuration file.
 * Taking in consideration command line arguments
 * Setup the nft rules.
-* And other ideas that will come when the scrtip evolves.
+* And other ideas that will come when the script evolves.
 
-## What do I expect from you :grey_question:.
+## What do I expect from you :grey_question:
 * Test this script. 
 * Comment, improve it 
 * Share your ideas.
 * Fork this repository
 * Add a Star to this repository
+
 Thanks for your help.:pray:
  
