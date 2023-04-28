@@ -22,7 +22,7 @@ MaxMindKey="<Put_Your_Key_Here>"
 # Filename of this script.
 ScriptName=`basename "$0"`
 # Semantic version number of this script.
-ScriptNameVersion="v0.0.11"
+ScriptNameVersion="0.0.12"
 # User configuration file.
 geo_conf="/etc/$ScriptName.conf"
 # Error log filename. This file logs errors in addition to the systemd Journal.
@@ -57,45 +57,38 @@ Mount=`which mount`
 ShaCheck=`which sha256sum`
 
 Checks () {
-#1. Checks if user is allowed to use sudo without interaction.
-CheckSudo=`time timeout 1 sudo chmod --help`
-# if [ $? -ne 0 ]; then
-#	echo "$User is not allowed to run sudo commands" >>$LogFile
-#	else
-#	sudo echo "$User seems to be allowed to run sudo commands without any password" >>$LogFile
-#fi
-#2. Check if log file alread exists, if not create it with current date and also checks at the same time that the script is allowed to create it.
+#1. Check if log file alread exists, if not create it with current date and also checks at the same time that the script is allowed to create it.
 if [ ! -f $LogFile ]; then
-	sudo echo "------------- [ Launch $ScriptName on $DateTime ]------------" >$LogFile
+	echo "------------- [ Launch $ScriptName on $DateTime ]------------" >$LogFile
 	if [ ! $? -eq 0 ]; then
 		echo "Unable to create $LogFile"
 		exit 1
 	fi
 	else
-	sudo echo "------------- [ On $DateTime $ScriptName has found an existing $LogFile, launch a rotate process ]------------" >>$LogFile
+	echo "------------- [ On $DateTime $ScriptName has found an existing $LogFile, launch a rotate process ]------------" >>$LogFile
 	
 	#Put the LogRotate command here
 fi
-sudo echo "---> [ STEP 01 Initial checks ]------------" >>$LogFile
-#3. Checks if used programms are accessible with this user privilege
+echo "---> [ STEP 01 Initial checks ]------------" >>$LogFile
+#2. Checks if used programms are accessible with this user privilege
 if [ -x $Mount ]; then
 	echo "$Mount can be launched with this $User account" >>$LogFile
 	else
-	sudo echo "Unable to find $Mount or $User isn't allowed to launch it" >>$LogFile
+	echo "Unable to find $Mount or $User isn't allowed to launch it" >>$LogFile
 	exit 1
 fi
 
 if [ -x $Unzip ]; then
-	sudo echo "$Unzip can be launched with this $User account" >>$LogFile
+	echo "$Unzip can be launched with this $User account" >>$LogFile
 	else
-	sudo echo "Unable to find $Unzip or $User isn't allowed to launch it" >>$LogFile
+	echo "Unable to find $Unzip or $User isn't allowed to launch it" >>$LogFile
 	exit 1
 fi
 
 if [ -x $Join ]; then
-	sudo echo "$Join can be launched with this $User account" >>$LogFile
+	echo "$Join can be launched with this $User account" >>$LogFile
 	else
-	sudo echo "Unable to find $Join or $User isn't allowed to launch it" >>$LogFile
+	echo "Unable to find $Join or $User isn't allowed to launch it" >>$LogFile
 	exit 1
 fi
 
@@ -127,51 +120,69 @@ if [ -x $ShaCheck ]; then
 	exit 1
 fi
 
-#4 Create RamDisk
-sudo mountpoint -q $RamDiskMountPoint
+#3 Create RamDisk
+mountpoint -q $RamDiskMountPoint
 if [ $? -ne 0 ]; then
-sudo mkdir $RamDiskMountPoint
+mkdir $RamDiskMountPoint
 if [ -d $RamDiskMountPoint ]; then echo "$ScriptName is able create a RamDisk mountpoint in $RamDiskMountPoint" >> $LogFile; else echo "unable to create mounting point in $RamDiskMountPoint">> $LogFile; fi
-sudo chmod 660 $RamDiskMountPoint
-sudo mount -t tmpfs -o size=512m MyRamDisk $RamDiskMountPoint
+chmod 660 $RamDiskMountPoint
+mount -t tmpfs -o size=512m MyRamDisk $RamDiskMountPoint
 if [ $? -eq 0 ]; then echo "$ScriptName has attached the RamDisk" >> $LogFile; else echo "unable to mount the RamDisk">> $LogFile; fi
 fi
 MyRamDiskMounted=`mount | tail -n 1`
 echo -e "RamDisk has been attached with the following parameters :\n$MyRamDiskMounted" >>$LogFile
 
-#5 Checks if used directories exists if not create them using sudo
-# Default temporary directory where this script ouptuts its working files.
+#4 Checks if used directories exists if not create them 
 # Default temporary directory where this script ouptuts its working files.
 TmpDir="$RamDiskMountPoint"
 if [ -d $TmpDir ]; then
-sudo touch $TmpDir/TstFile.out
+touch $TmpDir/TstFile.out
 	if [ $? -eq 0 ]; then echo "$ScriptName is able to write files in $TmpDir" >> $LogFile; fi
-sudo rm $TmpDir/TstFile.out
+rm $TmpDir/TstFile.out
 	if [ $? -eq 0 ]; then echo "$ScriptName is also able to delete files in $TmpDir" >> $LogFile; fi
 fi
 
 if [ -d $DbDir ]; then
-sudo touch $DbDir/TstFile.out
+touch $DbDir/TstFile.out
 	if [ $? -eq 0 ]; then echo "$ScriptName is able to write files in $DbDir" >> $LogFile; fi
-sudo rm $DbpDir/TstFile.out
+rm $DbpDir/TstFile.out
 	if [ $? -eq 0 ]; then echo "$ScriptName is also able to delete files in $DbDir" >> $LogFile; fi
 fi
 }
 
 Cleanup () {
 cd /tmp
-sudo umount $RamDiskMountPoint
+umount $RamDiskMountPoint
 if [ $? -eq 0 ]; then echo "The RamDisk has been detached from $RamDiskMountPoint" >> $LogFile; else echo "unable to unmount the RamDisk from $RamDiskMountPoint">> $LogFile; fi
-sudo rm -rf $RamDiskMountPoint >>$LogFile
+rm -rf $RamDiskMountPoint >>$LogFile
+}
+NoOptionDefined () {
+ echo "No option have been mentioned at least one option is required"
+ DisplayHelp
 }
 
+DisplayHelp () {
+		      echo "$(basename $0) [-v] [-h] [-p] [-l q|f] [-s d|n]" 
+		      echo "              -v     : Version" 
+		      echo "              -h     : This help file" 
+		      echo "              -p     : Purge all stored backups" 
+		      echo "              -l     : Log Level" 
+		      echo "                 q   : quiet, store only starting and ending in logfile" 
+		      echo "                 f   : store full details in logfile" 
+		      echo "              -s     : Only run a small part of this script, options have to be mentioned" 
+		      echo "                 d   : download : Only donwloads database and sha256 file"
+		      echo "                 n   : just add rulesets to nftables"
+		      exit 1
+
+
+}
 DownloadDb() {
 #Date of Database donwload
 DateDbDown="$(date +"%Y%m%d")-MaxMindDb.zip"
 DateCheckDown="$(date +"%Y%m%d")-SHA256Sum.txt"
 if [ ! -s "$TmpDir/$DateDbDown" ] && [ ! -s "$TmpDir/$DateCheckDown" ] ; then
-	sudo echo "---> [ STEP 02 Download Database ]------------" >>$LogFile
-	sudo echo "Downloading MaxMind database GeoLite2-Country from https://maxmind.com." >>$LogFile
+	echo "---> [ STEP 02 Download Database ]------------" >>$LogFile
+	echo "Downloading MaxMind database GeoLite2-Country from https://maxmind.com." >>$LogFile
 	if [ "$silent" = "yes" ]; then
 		$Wget -q -a $LogFile -O $TmpDir/$DateDbDown $MaxMindDonwloadZipUrl
 			if [ $? -ne 0 ]; then
@@ -196,29 +207,29 @@ if [ ! -s "$TmpDir/$DateDbDown" ] && [ ! -s "$TmpDir/$DateCheckDown" ] ; then
 			fi	
 	fi
 else
-sudo echo "---> [ STEP 02 Database Already exists download canceled ]------------" >>$LogFile
-sudo echo -e "The database has already been downloaded today\nUsing existing file : $TmpDir/$DateDbDown" >>$LogFile
-sudo echo -e "The SHA256 Checksum File has already been downloaded today\nUsing existing file : $TmpDir/$DateCheckDown" >>$LogFile
+echo "---> [ STEP 02 Database Already exists download canceled ]------------" >>$LogFile
+echo -e "The database has already been downloaded today\nUsing existing file : $TmpDir/$DateDbDown" >>$LogFile
+echo -e "The SHA256 Checksum File has already been downloaded today\nUsing existing file : $TmpDir/$DateCheckDown" >>$LogFile
 fi
 }
 
 Check256sums () {
-sudo echo "---> [ STEP 03 Compare checksums ]------------" >>$LogFile
+echo "---> [ STEP 03 Compare checksums ]------------" >>$LogFile
 local DownloadedSum=`cut -d' ' -f1  $TmpDir/$DateCheckDown`
 local SumCompute=`$ShaCheck $TmpDir/$DateDbDown | awk '{print $1}'`
 if [ $DownloadedSum != $SumCompute ]; then
-	sudo echo "Downloaded File checksumms differs" >>$LogFile
-	sudo -e echo "Checksum of : $TmpDir/$DateDbDown :\n$SumCompute" >>$LogFile
-	sudo -e echo "Checksum of : $TmpDir/$DateCheckDown :\n$DownloadedSum" >>$LogFile
+	echo "Downloaded File checksumms differs" >>$LogFile
+	echo "Checksum of : $TmpDir/$DateDbDown :\n$SumCompute" >>$LogFile
+	echo "Checksum of : $TmpDir/$DateCheckDown :\n$DownloadedSum" >>$LogFile
 	exit 1
 else
-sudo echo "Files checksumms are correct : $DownloadedSum" >>$LogFile
+echo "Files checksumms are correct : $DownloadedSum" >>$LogFile
 fi
 
 }
 
 ExtarctArchive() {
-sudo echo "---> [ STEP 04 Archive extraction ]------------" >>$LogFile
+echo "---> [ STEP 04 Archive extraction ]------------" >>$LogFile
 	if [ -s "$TmpDir/$DateDbDown" ]; then
 		cd $TmpDir
 			if [ $? -ne 0 ]; then
@@ -245,7 +256,7 @@ sudo echo "---> [ STEP 04 Archive extraction ]------------" >>$LogFile
 }
 
 SortingCleaningFiles() {
-sudo echo "---> [ STEP 05 Transform all files, Ordering and Filtering ]------------" >>$LogFile
+echo "---> [ STEP 05 Transform all files, Ordering and Filtering ]------------" >>$LogFile
 MaxmindDownloadedDb="MaxMindDb.zip"
 MaxMindLocation="GeoLite2-Country-Locations-en.csv"
 MaxMindIPv6Block="GeoLite2-Country-Blocks-IPv6.csv"
@@ -254,30 +265,30 @@ FilteredIPv6List="Filtered_IPv6.csv"
 FilteredIPv4List="Filtered_IPv4.csv"
 
 # Delete first line of each files as it describes the columns names.
-sudo echo "Delete first line of file $MaxMindLocation" >>$LogFile
+echo "Delete first line of file $MaxMindLocation" >>$LogFile
 sed -i '1d' $MaxMindLocation
-sudo echo "Delete first line of file $MaxMindIPv6Block" >>$LogFile
+echo "Delete first line of file $MaxMindIPv6Block" >>$LogFile
 sed -i '1d' $MaxMindIPv6Block
-sudo echo "Delete first line of file $MaxMindIPv4Block" >>$LogFile
+echo "Delete first line of file $MaxMindIPv4Block" >>$LogFile
 sed -i '1d' $MaxMindIPv4Block
 
-sudo echo "join data from $MaxMindLocation and  $MaxMindIPv6Block to create $FilteredIPv6List" >>$LogFile
+echo "join data from $MaxMindLocation and  $MaxMindIPv6Block to create $FilteredIPv6List" >>$LogFile
 join -t, -1 1 -2 2  <(cut -d, -f1,5 $MaxMindLocation) <(cut -d, -f1,2 $MaxMindIPv6Block | sort -t, -k2 -n) --nocheck-order | sort -t, -k2| cut -d, -f2,3>$FilteredIPv6List
-sudo echo "create each country file from $FilteredIPv6List" >>$LogFile
+echo "create each country file from $FilteredIPv6List" >>$LogFile
 while IFS=, read -r CountryCode Subnet ; do 
     echo "$Subnet" >> "$TmpDir/$CountryCode".nft6
 done < $FilteredIPv6List
 
-sudo echo "join data from $MaxMindLocation and  $MaxMindIPv4Block to create $FilteredIPv4List" >>$LogFile
+echo "join data from $MaxMindLocation and  $MaxMindIPv4Block to create $FilteredIPv4List" >>$LogFile
 join -t, -1 1 -2 2  <(cut -d, -f1,5 $MaxMindLocation) <(cut -d, -f1,2 $MaxMindIPv4Block | sort -t, -k2 -n) --nocheck-order | sort -t, -k2| cut -d, -f2,3>$FilteredIPv4List
-sudo echo "create each country file from $FilteredIPv4List" >>$LogFile
+echo "create each country file from $FilteredIPv4List" >>$LogFile
 while IFS=, read -r CountryCode Subnet ; do 
     echo "$Subnet" >> "$TmpDir/$CountryCode".nft4
 done < $FilteredIPv4List
 }
 
 SelectCountriesList () {
-sudo echo "---> [ STEP 06 Select list of countries ]------------" >>$LogFile
+echo "---> [ STEP 06 Select list of countries ]------------" >>$LogFile
 DestDir=$TmpDir"/DestTempDir"
 mkdir -p $DestDir
 IFS=',' read -ra array <<<"$AllowedCountriesList"
@@ -291,10 +302,10 @@ done
 }
 
 InsertCommas () {
-sudo echo "---> [ STEP 07 Insert commas and join lines of files located in $DestDir ]------------" >>$LogFile
+echo "---> [ STEP 07 Insert commas and join lines of files located in $DestDir ]------------" >>$LogFile
 shopt -s nullglob
 # create an array with all the filer/dir inside ~/myDir
-sudo echo "---> [ STEP 07a modify IPv4 files ]------------" >>$LogFile
+echo "---> [ STEP 07a modify IPv4 files ]------------" >>$LogFile
 # rm -v "$TmpDir"/*.nft4>>$LogFile
 rm "$TmpDir"/*.nft4
 Array=($DestDir/*.nft4)
@@ -309,7 +320,7 @@ for ((i=0; i<${#Array[@]}; i++)); do
 	sed -i -e 'N;s/\n//' "$TmpDir/$FileName"
 #	rm -v ${Array[$i]} >>$LogFile
 done
-sudo echo "---> [ STEP 07b modify IPv6 files ]------------" >>$LogFile
+echo "---> [ STEP 07b modify IPv6 files ]------------" >>$LogFile
 # rm -v "$TmpDir"/*.nft6>>$LogFile
 rm "$TmpDir"/*.nft6
 Array=($DestDir/*.nft6)
@@ -327,7 +338,7 @@ done
 # rm -v "$DestDir"/*.nft4>>$LogFile
 # rm -v "$DestDir"/*.nft6>>$LogFile
 # rm -v "$TmpDir"/*.nft4>>$LogFile
-sudo echo "Delete directory $DestDir and its content" >>$LogFile
+echo "Delete directory $DestDir and its content" >>$LogFile
 rm -rf $DestDir
 # rm -vrf $DestDir>>$LogFile
 
@@ -336,7 +347,7 @@ rm -rf $DestDir
 ArchiveFiles () {
 DateArchiveFile="$(date +"%Y%m%d")-ScriptName-rulesets.tar.gz"
 cd $TmpDir
-sudo echo "---> [ STEP 08 archive the following files in $DbDir/$DateArchiveFile ]------------" >>$LogFile
+echo "---> [ STEP 08 archive the following files in $DbDir/$DateArchiveFile ]------------" >>$LogFile
 if [ ! -d $DbDir ]; then 
 	mkdir -pv $DbDir >>$LogFile
 else 
@@ -348,10 +359,58 @@ tar czvf $DbDir/$DateArchiveFile *.nft*>>$LogFile
 MainProg() {
 # Start a timer for the script run time.
 local StartTime=$(date +%s)
+
+# Check parameters mentioned at script launch
+LFlag=false
+SFlag=false
+NoArg=true
+Parameter="vpl:s:"
+  while getopts $Parameter Options
+  do
+   case ${Options} in
+     v)
+      echo "$(basename $0) version : $ScriptNameVersion"
+      exit 0
+     ;;
+     p)
+      echo "Purge all stored data"
+      ;;
+     l)
+      LFlag=true;
+      Lvalue=${OPTARG}
+      echo "loglevel ${Lvalue}"
+     ;;
+     s)
+      SFlag=true;
+      Svalue=${OPTARG}
+      echo "stage ${Svalue}"
+     ;;
+#     :)
+#      echo "no parameter"
+#     ;;
+     \?|h)
+      DisplayHelp
+      exit 1
+     ;;
+   esac
+ noarg=false
+done
+[[ "$noarg" == true  ]] && { NoOptionDefined; }
+shift $(($OPTIND-1))
+    if ! $LFlag && [[ -d $1 ]]
+      then echo "The parameter 'l' option requires a mandatory argument"
+      exit 1
+    fi
+    if ! $SFlag && [[ -d $1 ]]
+      then echo "The parameter 's' option requires a mandatory argument"
+      exit 1
+    fi
+										    
+
 #Run Checks procedure
 Checks
 #Run DownloadDb procedure (Download database if necesary) and extracts files if database exists
-DownloadDb
+# DownloadDb
 # Checks the SHA256 sums of downloaded file and the one computed
 Check256sums
 # Launch archive extraction
