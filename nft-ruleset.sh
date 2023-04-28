@@ -401,12 +401,12 @@ Parameter="vpl:s:"
       exit 1
      ;;
    esac
- noarg=false
+ NoArg=false
 done
-[[ "$noarg" == true  ]] && { NoOptionDefined; }
+[[ "$NoArg" == true  ]] && { NoOptionDefined; }
 shift $(($OPTIND-1))
     if ! $LFlag && [[ -d $1 ]]
-      then echo "The parameter 'l' option requires a mandatory argument"
+      then echo -e "The parameter 'l' option requires a mandatory argument\n --> f : Full log, the most verbose option to see what the script is doing.\n--> q: Basic log option">>$LogFile
       exit 1
     fi
     if ! $SFlag && [[ -d $1 ]]
