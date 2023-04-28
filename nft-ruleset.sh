@@ -320,7 +320,6 @@ for ((i=0; i<${#Array[@]}; i++)); do
 	sed -i -e 's/^/'"$BeginOfFile"'\n/' "$TmpDir/$FileName"
 	sed -i -e '$a  }' "$TmpDir/$FileName"
 	sed -i -e 'N;s/\n//' "$TmpDir/$FileName"
-#	rm -v ${Array[$i]} >>$LogFile
 done
 echo "---> [ STEP 07b modify IPv6 files ]------------" >>$LogFile
 # rm -v "$TmpDir"/*.nft6>>$LogFile
@@ -337,13 +336,8 @@ for ((i=0; i<${#Array[@]}; i++)); do
 	sed -i -e 'N;s/\n//' "$TmpDir/$FileName"
 #	rm -v ${Array[$i]} >>$LogFile
 done
-# rm -v "$DestDir"/*.nft4>>$LogFile
-# rm -v "$DestDir"/*.nft6>>$LogFile
-# rm -v "$TmpDir"/*.nft4>>$LogFile
 echo "Delete directory $DestDir and its content" >>$LogFile
 rm -rf $DestDir
-# rm -vrf $DestDir>>$LogFile
-
 }
 
 ArchiveFiles () {
@@ -424,7 +418,7 @@ shift $(($OPTIND-1))
 #Run Checks procedure
 Checks
 #Run DownloadDb procedure (Download database if necesary) and extracts files if database exists
-# DownloadDb
+DownloadDb
 # Checks the SHA256 sums of downloaded file and the one computed
 Check256sums
 # Launch archive extraction
@@ -442,7 +436,5 @@ Cleanup
 # Display the script run time.
 echo "Script run time : $(($(date +%s) - $StartTime))s">>$LogFile	
 }
-
 MainProg "$@"
-
 exit 0
