@@ -10,7 +10,12 @@
 #
 # This script ought to be placed in /usr/local/bin.
 # It stores the files generated 
-# -------> User have to modify those script variables.
+#
+# There is only 2 variables to modify :
+# 1. The list of countries that have to be allowed in INPUT
+# 2. The MaxMind Licence key
+#
+#-----------[ User have to modify those script variables ]-----------
 #
 # List of Allowed Countries to filter IP addresses.
 # This selects the countries allowed by nftables afterward
@@ -18,13 +23,12 @@ AllowedCountriesList=(AT,AU,BE,DE,DK,ES,FI,FR,GB,IE,IS,IT,JP,LU,MC,NL,NO,PT,SE,V
 # MaxMind License Key
 MaxMindKey="<Put_Your_Key_Here>"
 #
+#-----------[ User should not modify anything below this line ]-----------
 #
 # Filename of this script.
 ScriptName=`basename "$0"`
-# Semantic version number of this script.
-ScriptNameVersion="0.0.12"
-# User configuration file.
-geo_conf="/etc/$ScriptName.conf"
+# Version number of this script.
+ScriptNameVersion="0.0.13"
 # Error log filename. This file logs errors in addition to the systemd Journal.
 LogFile="/var/log/$ScriptName.log"
 # Download URL.
@@ -37,13 +41,11 @@ DateTime="$(date +"%d/%m/%Y %H:%M:%S")"
 # Files to remove once the archive has been extracted.
 FilesToDelete="COPYRIGHT.txt,LICENSE.txt,GeoLite2-Country-Locations-zh-CN.csv,GeoLite2-Country-Locations-fr.csv,GeoLite2-Country-Locations-es.csv,GeoLite2-Country-Locations-de.csv,GeoLite2-Country-Locations-pt-BR.csv,GeoLite2-Country-Locations-ja.csv,GeoLite2-Country-Locations-ru.csv"
 
-#Date of Database donwload
-
 # Ramdisk System MountPoint
 RamDiskMountPoint="/tmp/RamDisk"
 
-
-# Default cleaned database to be used with nft in case of reboot.
+# Default archives storage directory
+# It could be be used with nftables in case of reboot.
 DbDir="/var/spool/$ScriptName"
 
 #-----------[ commands used by this script ]-----------
@@ -356,6 +358,20 @@ fi
 tar czvf $DbDir/$DateArchiveFile *.nft*>>$LogFile
 }
 
+PurgeSavedArchives ()
+	{
+echo "---> [ Purge Saved Archives in the directory : $DbDir ]------------" >>$LogFile
+if [ -d $DbDir ]; then
+	echo "Directory content : ">>$LogFile
+	ls -lrth  $DbDir >>$LogFile
+	rm -rfv $DbDir >>$LogFile
+	exit 0
+else
+	echo "Directory ${DbDir} does not exists" >>$LogFile
+	exit 1
+fi
+	}
+
 MainProg() {
 # Start a timer for the script run time.
 local StartTime=$(date +%s)
@@ -373,7 +389,8 @@ Parameter="vpl:s:"
       exit 0
      ;;
      p)
-      echo "Purge all stored data"
+	# Purge Previously stored archives.
+	PurgeSavedArchives
       ;;
      l)
       LFlag=true;
@@ -385,9 +402,6 @@ Parameter="vpl:s:"
       Svalue=${OPTARG}
       echo "stage ${Svalue}"
      ;;
-#     :)
-#      echo "no parameter"
-#     ;;
      \?|h)
       DisplayHelp
       exit 1
