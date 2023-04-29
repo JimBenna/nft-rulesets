@@ -28,7 +28,7 @@ MaxMindKey="<Put_Your_Key_Here>"
 # Filename of this script.
 ScriptName=`basename "$0"`
 # Version number of this script.
-ScriptNameVersion="0.0.13"
+ScriptNameVersion="0.0.14"
 # Error log filename. This file logs errors in addition to the systemd Journal.
 LogFile="/var/log/$ScriptName.log"
 # Download URL.
@@ -162,7 +162,40 @@ NoOptionDefined () {
  echo "No option have been mentioned at least one option is required"
  DisplayHelp
 }
-
+LogLevel ()
+{
+case ${Lvalue} in
+	q)
+		echo "Quiet mode selected"
+		FullModeLog=false
+	;;
+	f)
+		echo "Full mode selected"
+		FullModeLog=true
+	;;
+	*)
+		echo "Unknown option selected"
+		DisplayHelp
+		exit 1
+	;;
+esac
+}
+StageLevel ()
+{
+case ${Svalue} in
+	d)
+		echo "Download Option Selected"
+	;;
+	n)
+		echo "NfTables rulesets setup"
+	;;
+	*)
+		echo "Unknown option selected"
+		DisplayHelp
+		exit 1
+	;;
+esac
+}
 DisplayHelp () {
 		      echo "$(basename $0) [-v] [-h] [-p] [-l q|f] [-s d|n]" 
 		      echo "              -v     : Version" 
@@ -389,12 +422,14 @@ Parameter="vpl:s:"
      l)
       LFlag=true;
       Lvalue=${OPTARG}
-      echo "loglevel ${Lvalue}"
+      LogLevel
+ #     echo "loglevel ${Lvalue}"
      ;;
      s)
       SFlag=true;
       Svalue=${OPTARG}
-      echo "stage ${Svalue}"
+      StageLevel
+#      echo "stage ${Svalue}"
      ;;
      \?|h)
       DisplayHelp
