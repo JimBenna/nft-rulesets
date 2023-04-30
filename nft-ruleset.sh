@@ -28,7 +28,7 @@ MaxMindKey="<Put_Your_Key_Here>"
 # Filename of this script.
 ScriptName=`basename "$0"`
 # Version number of this script.
-ScriptNameVersion="0.0.14"
+ScriptNameVersion="0.0.15"
 # Error log filename. This file logs errors in addition to the systemd Journal.
 LogFile="/var/log/$ScriptName.log"
 # Download URL.
@@ -215,32 +215,32 @@ DownloadDb() {
 #Date of Database donwload
 DateDbDown="$(date +"%Y%m%d")-MaxMindDb.zip"
 DateCheckDown="$(date +"%Y%m%d")-SHA256Sum.txt"
-if [ ! -s "$TmpDir/$DateDbDown" ] && [ ! -s "$TmpDir/$DateCheckDown" ] ; then
-	echo "---> [ STEP 02 Download Database ]------------" >>$LogFile
-	echo "Downloading MaxMind database GeoLite2-Country from https://maxmind.com." >>$LogFile
-	if [ "$silent" = "yes" ]; then
-		$Wget -q -a $LogFile -O $TmpDir/$DateDbDown $MaxMindDonwloadZipUrl
+if [ ! -s "${TmpDir}/${DateDbDown}" ] && [ ! -s "${TmpDir}/${DateCheckDown}" ] ; then
+	echo "---> [ STEP 02 Download Database ]------------" >>${LogFile}
+	echo "Downloading MaxMind database GeoLite2-Country from https://maxmind.com." >>${LogFile}
+	case ${FullModeLog} in
+		true)
+			WgetOption="-nv -a ${LogFile}"
+			;;
+		false)
+			WgetOption="-a -a ${LogFile}"
+			;;
+		*)
+			echo "A strange parameter has been passed in the wget command... Exiting now" >>$LogFile
+			exit 22
+			;;
+	esac
+		${Wget} ${WgetOption} -O ${TmpDir}/${DateDbDown} ${MaxMindDonwloadZipUrl}
 			if [ $? -ne 0 ]; then
-				echo "Failed to download $MaxMindDonwloadZipUrl. Exiting..." >>$LogFile
-				exit 1
+				echo "Failed to download from ${MaxMindDonwloadZipUrl}. Exiting..." >>$LogFile
+				exit 23
 			fi
-		$Wget -q -a $LogFile -O $TmpDir/$DateCheckDown $MMCheckSumFile
+		${Wget} ${WgetOption} -O ${TmpDir}/${DateCheckDown} ${MMCheckSumFile}
 			if [ $? -ne 0 ]; then
 				echo "Failed to download $MMCheckSumFile. Exiting..." >>$LogFile
-				exit 1
+				exit 24
 			fi	
-	else
-		$Wget -nv -a $LogFile -O $TmpDir/$DateDbDown $MaxMindDonwloadZipUrl
-			if [ $? -ne 0 ]; then
-				echo "Failed to download $MaxMindDonwloadZipUrl. Exiting..." >>$LogFile
-				exit 1
-			fi
-		$Wget -nv -a $LogFile -O $TmpDir/$DateCheckDown $MMCheckSumFile
-			if [ $? -ne 0 ]; then
-				echo "Failed to download $MMCheckSumFile. Exiting..." >>$LogFile
-				exit 1
-			fi	
-	fi
+
 else
 echo "---> [ STEP 02 Database Already exists download canceled ]------------" >>$LogFile
 echo -e "The database has already been downloaded today\nUsing existing file : $TmpDir/$DateDbDown" >>$LogFile
@@ -256,7 +256,7 @@ if [ $DownloadedSum != $SumCompute ]; then
 	echo "Downloaded File checksumms differs" >>$LogFile
 	echo "Checksum of : $TmpDir/$DateDbDown :\n$SumCompute" >>$LogFile
 	echo "Checksum of : $TmpDir/$DateCheckDown :\n$DownloadedSum" >>$LogFile
-	exit 1
+	exit 31
 else
 echo "Files checksumms are correct : $DownloadedSum" >>$LogFile
 fi
@@ -269,13 +269,13 @@ echo "---> [ STEP 04 Archive extraction ]------------" >>$LogFile
 		cd $TmpDir
 			if [ $? -ne 0 ]; then
 				echo "Unable to access the $TmpDir" >>$LogFile
-				exit 1
+				exit 41
 			fi
 		echo "Extract archive files from : $DateDbDown in $TmpDir" >>$LogFile
 			$Unzip -j -o "$TmpDir/$DateDbDown">>$LogFile
 			if [ $? -ne 0 ] || [ ! -s "$DateDbDown" ]; then
 				echo "Unable to extract archive" >> $LogFile
-				exit 1
+				exit 42
 			else
 				echo "---> [ STEP 04a Remove useless files to save some space on $RamDiskMountPoint ]------------"  >>$LogFile
 				IFS=, read -r -a array <<< "$FilesToDelete"
@@ -286,18 +286,18 @@ echo "---> [ STEP 04 Archive extraction ]------------" >>$LogFile
 
 	else
 		echo -e "The Downloaded archive file $DateDbDown has not been found in $TmpDir\nExiting..." >>$LogFile
-		exit 1
+		exit 43
 	fi
 }
 
 SortingCleaningFiles() {
 echo "---> [ STEP 05 Transform all files, Ordering and Filtering ]------------" >>$LogFile
 MaxmindDownloadedDb="MaxMindDb.zip"
-MaxMindLocation="GeoLite2-Country-Locations-en.csv"
-MaxMindIPv6Block="GeoLite2-Country-Blocks-IPv6.csv"
-MaxMindIPv4Block="GeoLite2-Country-Blocks-IPv4.csv"
-FilteredIPv6List="Filtered_IPv6.csv"
-FilteredIPv4List="Filtered_IPv4.csv"
+local MaxMindLocation="${TmpDir}/GeoLite2-Country-Locations-en.csv"
+local MaxMindIPv6Block="${TmpDir}/GeoLite2-Country-Blocks-IPv6.csv"
+local MaxMindIPv4Block="${TmpDir}/GeoLite2-Country-Blocks-IPv4.csv"
+local FilteredIPv6List="${TmpDir}/Filtered_IPv6.csv"
+local FilteredIPv4List="${TmpDir}/Filtered_IPv4.csv"
 
 # Delete first line of each files as it describes the columns names.
 echo "Delete first line of file $MaxMindLocation" >>$LogFile
@@ -328,10 +328,20 @@ DestDir=$TmpDir"/DestTempDir"
 mkdir -p $DestDir
 IFS=',' read -ra array <<<"$AllowedCountriesList"
 for CountryCode in "${array[@]}"; do
-#	cp -v "$TmpDir/$CountryCode".nft4 "$DestDir">>$LogFile
-#	cp -v "$TmpDir/$CountryCode".nft6 "$DestDir">>$LogFile
-	cp "$TmpDir/$CountryCode".nft4 "$DestDir"
-	cp "$TmpDir/$CountryCode".nft6 "$DestDir"
+	case ${FullModeLog} in
+		true)
+			cp -v "$TmpDir/$CountryCode".nft4 "$DestDir">>$LogFile
+	 		cp -v "$TmpDir/$CountryCode".nft6 "$DestDir">>$LogFile
+			;;
+		false)
+			cp "$TmpDir/$CountryCode".nft4 "$DestDir"
+			cp "$TmpDir/$CountryCode".nft6 "$DestDir"
+			;;
+		*)
+			echo "A strange parameter while copying ${TmpDir}/${CountryCode} files to ${DestDir}... Exiting now" >>$LogFile
+			exit 61 
+			;;
+	esac
 done
 
 }
@@ -361,7 +371,7 @@ Array=($DestDir/*.nft6)
 # iterate through array using a counter
 for ((i=0; i<${#Array[@]}; i++)); do
 	FileName=`basename ${Array[$i]}`
-    awk 'BEGIN{RS="";FS="\n";OFS=", "}{$1=$1}7' "${Array[$i]}" >"$TmpDir/$FileName"
+        awk 'BEGIN{RS="";FS="\n";OFS=", "}{$1=$1}7' "${Array[$i]}" >"$TmpDir/$FileName"
 	Country=`echo $FileName | cut -d. -f1`
 	BeginOfFile="ipv6_"$Country" = {"
 	sed -i -e 's/^/'"$BeginOfFile"'\n/' "$TmpDir/$FileName"
