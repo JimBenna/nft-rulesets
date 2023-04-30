@@ -19,7 +19,8 @@
 #
 # List of Allowed Countries to filter IP addresses.
 # This selects the countries allowed by nftables afterward
-AllowedCountriesList=(AT,AU,BE,DE,DK,ES,FI,FR,GB,IE,IS,IT,JP,LU,MC,NL,NO,PT,SE,VA)
+#
+AllowedCountriesList=(AT,AU,BE,CA,CH,DE,DK,ES,FI,FR,GB,IE,IS,IT,JP,LU,MC,NL,NO,PT,SE,US,VA)
 # MaxMind License Key
 MaxMindKey="<Put_Your_Key_Here>"
 #
@@ -28,35 +29,103 @@ MaxMindKey="<Put_Your_Key_Here>"
 # Filename of this script.
 ScriptName=`basename "$0"`
 # Version number of this script.
-ScriptNameVersion="0.0.15"
+ScriptNameVersion="0.0.16"
 # Error log filename. This file logs errors in addition to the systemd Journal.
 LogFile="/var/log/$ScriptName.log"
 # Download URL.
-MaxMindDonwloadZipUrl="https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country-CSV&license_key=$MaxMindKey&suffix=zip"
+MaxMindDonwloadZipUrl="https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country-CSV&license_key=${MaxMindKey}&suffix=zip"
 #Checksum File
-MMCheckSumFile="https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country-CSV&license_key=$MaxMindKey&suffix=zip.sha256"
+MMCheckSumFile="https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country-CSV&license_key=${MaxMindKey}&suffix=zip.sha256"
 # Current date/time.
 DateTime="$(date +"%d/%m/%Y %H:%M:%S")"
-
+#
 # Files to remove once the archive has been extracted.
 FilesToDelete="COPYRIGHT.txt,LICENSE.txt,GeoLite2-Country-Locations-zh-CN.csv,GeoLite2-Country-Locations-fr.csv,GeoLite2-Country-Locations-es.csv,GeoLite2-Country-Locations-de.csv,GeoLite2-Country-Locations-pt-BR.csv,GeoLite2-Country-Locations-ja.csv,GeoLite2-Country-Locations-ru.csv"
-
+#
 # Ramdisk System MountPoint
 RamDiskMountPoint="/tmp/RamDisk"
-
+#
 # Default archives storage directory
 # It could be be used with nftables in case of reboot.
 DbDir="/var/spool/$ScriptName"
-
+#
 #-----------[ commands used by this script ]-----------
 User=`whoami`
-Unzip=`which unzip`
-Join=`which join`
-Sort=`which sort`
-Grep=`which grep`
-Wget=`which wget`
-Mount=`which mount`
-ShaCheck=`which sha256sum`
+#
+#-----------[ Functions used by the script ]-----------
+#
+CheckProgramm ()
+{
+local ProgNameVar=$1
+local ProgPath=`which ${ProgNameVar}`
+echo "${ProgPath}"
+ if [ -x ${ProgPath} ]; then
+    case ${FullModeLog} in
+            true)
+             echo "${ProgPath} can be launched with the ${User} account" >>${LogFile}
+            ;;
+            false)
+             # Quiet Mode selected no log output
+            ;;
+            *)
+             echo "A strange parameter has been passed during the tests of programms to be used. And that should not occur, so Exiting Right now" >>${LogFile}
+             exit 11 
+            ;;
+    esac
+
+ else
+  echo "Unable to find ${ProgPath} or ${User} isn't allowed to launch it" >>${LogFile}
+  exit 10
+fi
+}
+MkRamDrive ()
+{
+# This Function creates a RamDrive and requires 3 parameters : 
+# 1. The RamDrive Size
+# 2. The RamDrive Name
+# 3. The RamDrive MountPoint
+
+local Size=$1
+local RamDriveName=$2
+local RamDiskMountPoint=$3
+  case ${FullModeLog} in
+	true)
+	 ${MountPoint} -q ${RamDiskMountPoint}
+	 if [ $? -ne 0 ]; then
+		${MkDir} ${RamDiskMountPoint}
+		if [ -d ${RamDiskMountPoint} ]; then 
+			echo "${ScriptName} is able create a RamDisk mountpoint in ${RamDiskMountPoint}" >> ${LogFile}; 
+		else 
+			echo "unable to create mounting point in ${RamDiskMountPoint}">> ${LogFile}; 
+		fi
+	else
+		echo "${RamDiskMountPoint} already exists and is a valid mountpoint" >> ${LogFile}; 
+
+	 fi
+	echo -e "RamDrive has been created with the following parameters :\n Size : ${Size} MB\n Name : ${RamDriveName}\n MountPoint : ${RamDiskMountPoint}" >>${LogFile}
+	;;
+	false)
+	 # Quiet Mode selected no log output
+	 ${MountPoint} -q ${RamDiskMountPoint}
+	 if [ $? -ne 0 ]; then
+		${MkDir} ${RamDiskMountPoint}
+	 fi
+	;;
+	*)
+	 echo "A strange parameter has been passed During the creation of the RamDrive" >>$LogFile
+	 exit 90
+	;;
+  esac
+
+	chmod 660 ${RamDiskMountPoint}
+	${Mount} -t tmpfs -o size=${Size}m ${RamDriveName} ${RamDiskMountPoint}
+	if ${FullModeLog}; 
+	then 
+		MyRamDiskMounted=`${Mount} | ${Grep} ${RamDiskMountPoint}` 
+		echo -e "RamDisk has been attached with the following parameters :\n$MyRamDiskMounted" >>${LogFile}
+	fi
+	echo ${RamDiskMountPoint}
+}
 
 Checks () {
 #1. Check if log file alread exists, if not create it with current date and also checks at the same time that the script is allowed to create it.
@@ -71,92 +140,73 @@ if [ ! -f $LogFile ]; then
 	
 	#Put the LogRotate command here
 fi
-echo "---> [ STEP 01 Initial checks ]------------" >>$LogFile
+echo "--->   [ STEP 01 Initial checks ]------------" >>${LogFile}
 #2. Checks if used programms are accessible with this user privilege
-if [ -x $Mount ]; then
-	echo "$Mount can be launched with this $User account" >>$LogFile
-	else
-	echo "Unable to find $Mount or $User isn't allowed to launch it" >>$LogFile
-	exit 1
-fi
+Mount=$(CheckProgramm mount)
+UnMount=$(CheckProgramm umount)
+Unzip=$(CheckProgramm unzip)
+Sed=$(CheckProgramm sed)
+Join=$(CheckProgramm join)
+Sort=$(CheckProgramm sort)
+Awk=$(CheckProgramm awk)
+Grep=$(CheckProgramm grep)
+Wget=$(CheckProgramm wget)
+Cut=$(CheckProgramm cut)
+ShaCheck=$(CheckProgramm sha256sum)
+MkDir=$(CheckProgramm mkdir)
+MountPoint=$(CheckProgramm mountpoint)
+TarGz=$(CheckProgramm tar)
+NfTables=$(CheckProgramm nft)
 
-if [ -x $Unzip ]; then
-	echo "$Unzip can be launched with this $User account" >>$LogFile
-	else
-	echo "Unable to find $Unzip or $User isn't allowed to launch it" >>$LogFile
-	exit 1
-fi
 
-if [ -x $Join ]; then
-	echo "$Join can be launched with this $User account" >>$LogFile
-	else
-	echo "Unable to find $Join or $User isn't allowed to launch it" >>$LogFile
-	exit 1
-fi
-
-if [ -x $Sort ]; then
-	echo "$Sort can be launched with this $User account" >>$LogFile
-	else
-	echo "Unable to find $Sort or $User isn't allowed to launch it" >>$LogFile
-	exit 1
-fi
-
-if [ -x $Grep ]; then
-	echo "$Grep can be launched with this $User account" >>$LogFile
-	else
-	echo "Unable to find $Grep or $User isn't allowed to launch it" >>$LogFile
-	exit 1
-fi
-
-if [ -x $Wget ]; then
-	echo "$Wget can be launched with this $User account" >>$LogFile
-	else
-	echo "Unable to find $Wget or $User isn't allowed to launch it" >>$LogFile
-	exit 1
-fi
-
-if [ -x $ShaCheck ]; then
-	echo "$ShaCheck can be launched with this $User account" >>$LogFile
-	else
-	echo "Unable to find $ShaCheck or $User isn't allowed to launch it" >>$LogFile
-	exit 1
-fi
-
+echo "--->   [ STEP 02 Creation of Temporary RamDrive to compute and download Files ]------------" >>${LogFile}
 #3 Create RamDisk
-mountpoint -q $RamDiskMountPoint
-if [ $? -ne 0 ]; then
-mkdir $RamDiskMountPoint
-if [ -d $RamDiskMountPoint ]; then echo "$ScriptName is able create a RamDisk mountpoint in $RamDiskMountPoint" >> $LogFile; else echo "unable to create mounting point in $RamDiskMountPoint">> $LogFile; fi
-chmod 660 $RamDiskMountPoint
-mount -t tmpfs -o size=512m MyRamDisk $RamDiskMountPoint
-if [ $? -eq 0 ]; then echo "$ScriptName has attached the RamDisk" >> $LogFile; else echo "unable to mount the RamDisk">> $LogFile; fi
-fi
-MyRamDiskMounted=`mount | tail -n 1`
-echo -e "RamDisk has been attached with the following parameters :\n$MyRamDiskMounted" >>$LogFile
+RamDiskDir=$(MkRamDrive "250" "RamDriveTemp" "/tmp/RamDriveTemp")
 
+echo "--->   [ STEP 03 Creation of Temporary Directories and checks if script can write in them ]------------" >>${LogFile}
 #4 Checks if used directories exists if not create them 
 # Default temporary directory where this script ouptuts its working files.
-TmpDir="$RamDiskMountPoint"
-if [ -d $TmpDir ]; then
-touch $TmpDir/TstFile.out
-	if [ $? -eq 0 ]; then echo "$ScriptName is able to write files in $TmpDir" >> $LogFile; fi
-rm $TmpDir/TstFile.out
-	if [ $? -eq 0 ]; then echo "$ScriptName is also able to delete files in $TmpDir" >> $LogFile; fi
+TmpDir="${RamDiskDir}"
+if [ -d ${TmpDir} ]; then
+ touch ${TmpDir}/TstFile.out
+ if [ $? -eq 0 ]; then echo "${ScriptName} is able to write files in ${TmpDir}" >> $LogFile; fi
+ rm ${TmpDir}/TstFile.out
+ if [ $? -eq 0 ]; then echo "${ScriptName} is also able to delete files in ${TmpDir}" >> ${LogFile}; fi
 fi
-
-if [ -d $DbDir ]; then
-touch $DbDir/TstFile.out
-	if [ $? -eq 0 ]; then echo "$ScriptName is able to write files in $DbDir" >> $LogFile; fi
-rm $DbpDir/TstFile.out
-	if [ $? -eq 0 ]; then echo "$ScriptName is also able to delete files in $DbDir" >> $LogFile; fi
+# Default temporary directory where this script ouptuts its files that can be used at a later time.
+if [ -d ${DbDir} ]; then
+ touch ${DbDir}/TstFile.out
+ if [ $? -eq 0 ]; then echo "${ScriptName} is able to write files in ${DbDir}" >> ${LogFile}; fi
+ rm ${DbDir}/TstFile.out
+ if [ $? -eq 0 ]; then echo "${ScriptName} is also able to delete files in ${DbDir}" >> ${LogFile}; fi
 fi
 }
 
 Cleanup () {
+echo "--->   [ STEP 11 RamDrive destruction ]------------" >>${LogFile}
 cd /tmp
-umount $RamDiskMountPoint
-if [ $? -eq 0 ]; then echo "The RamDisk has been detached from $RamDiskMountPoint" >> $LogFile; else echo "unable to unmount the RamDisk from $RamDiskMountPoint">> $LogFile; fi
-rm -rf $RamDiskMountPoint >>$LogFile
+	case ${FullModeLog} in
+		true)
+			${UnMount} ${RamDiskDir}
+			if [ $? -eq 0 ]; then 
+				echo "The RamDisk has been detached from ${RamDiskDir}" >> $LogFile; 
+			else 
+				echo "unable to unmount the RamDisk from ${RamDiskDir}">> ${LogFile}; 
+			fi
+			rm -rfv ${RamDiskDir} >>${LogFile}
+		;;
+		false)
+			${UnMount} ${RamDiskDir}
+			if [ $? ! -eq 0 ]; then 
+				echo "unable to unmount the RamDisk from ${RamDiskDir}">> ${LogFile}; 
+			fi
+			rm -rf ${RamDiskDir} 
+		;;
+		*)
+			echo "A strange parameter has been found... Exiting now" >>${LogFile}
+			exit 111
+		;;
+esac
 }
 NoOptionDefined () {
  echo "No option have been mentioned at least one option is required"
@@ -166,11 +216,11 @@ LogLevel ()
 {
 case ${Lvalue} in
 	q)
-		echo "Quiet mode selected"
+		echo "Quiet mode selected">> ${LogFile}
 		FullModeLog=false
 	;;
 	f)
-		echo "Full mode selected"
+		echo "Full mode selected">> ${LogFile}
 		FullModeLog=true
 	;;
 	*)
@@ -216,83 +266,105 @@ DownloadDb() {
 DateDbDown="$(date +"%Y%m%d")-MaxMindDb.zip"
 DateCheckDown="$(date +"%Y%m%d")-SHA256Sum.txt"
 if [ ! -s "${TmpDir}/${DateDbDown}" ] && [ ! -s "${TmpDir}/${DateCheckDown}" ] ; then
-	echo "---> [ STEP 02 Download Database ]------------" >>${LogFile}
-	echo "Downloading MaxMind database GeoLite2-Country from https://maxmind.com." >>${LogFile}
+	echo "--->   [ STEP 04 Download Database ]------------" >>${LogFile}
 	case ${FullModeLog} in
 		true)
+			echo "Downloading MaxMind database GeoLite2-Country from https://maxmind.com." >>${LogFile}
 			WgetOption="-nv -a ${LogFile}"
 			;;
 		false)
-			WgetOption="-a -a ${LogFile}"
+			WgetOption="-q -a ${LogFile}"
 			;;
 		*)
 			echo "A strange parameter has been passed in the wget command... Exiting now" >>$LogFile
-			exit 22
+			exit 41
 			;;
 	esac
 		${Wget} ${WgetOption} -O ${TmpDir}/${DateDbDown} ${MaxMindDonwloadZipUrl}
 			if [ $? -ne 0 ]; then
 				echo "Failed to download from ${MaxMindDonwloadZipUrl}. Exiting..." >>$LogFile
-				exit 23
+				exit 42
 			fi
 		${Wget} ${WgetOption} -O ${TmpDir}/${DateCheckDown} ${MMCheckSumFile}
 			if [ $? -ne 0 ]; then
 				echo "Failed to download $MMCheckSumFile. Exiting..." >>$LogFile
-				exit 24
+				exit 43
 			fi	
 
 else
-echo "---> [ STEP 02 Database Already exists download canceled ]------------" >>$LogFile
+echo "--->   [ STEP 04 Database Already exists download canceled ]------------" >>$LogFile
 echo -e "The database has already been downloaded today\nUsing existing file : $TmpDir/$DateDbDown" >>$LogFile
 echo -e "The SHA256 Checksum File has already been downloaded today\nUsing existing file : $TmpDir/$DateCheckDown" >>$LogFile
 fi
 }
 
 Check256sums () {
-echo "---> [ STEP 03 Compare checksums ]------------" >>$LogFile
-local DownloadedSum=`cut -d' ' -f1  $TmpDir/$DateCheckDown`
-local SumCompute=`$ShaCheck $TmpDir/$DateDbDown | awk '{print $1}'`
-if [ $DownloadedSum != $SumCompute ]; then
-	echo "Downloaded File checksumms differs" >>$LogFile
-	echo "Checksum of : $TmpDir/$DateDbDown :\n$SumCompute" >>$LogFile
-	echo "Checksum of : $TmpDir/$DateCheckDown :\n$DownloadedSum" >>$LogFile
-	exit 31
+echo "--->   [ STEP 05 Compare checksums ]------------" >>$LogFile
+local DownloadedSum=`${Cut} -d' ' -f1  ${TmpDir}/${DateCheckDown}`
+local SumCompute=`$ShaCheck ${TmpDir}/${DateDbDown} | ${Awk} '{print $1}'`
+if [ ${DownloadedSum} != ${SumCompute} ]; then
+	echo "Downloaded File checksumms differs" >>${LogFile}
+	echo -e "Checksum of : ${TmpDir}/${DateDbDown} :\n${SumCompute}" >>${LogFile}
+	echo -e "Checksum of : ${TmpDir}/${DateCheckDown} :\n${DownloadedSum}" >>${LogFile}
+	exit 51
 else
-echo "Files checksumms are correct : $DownloadedSum" >>$LogFile
+	if ${FullModeLog};
+		then
+		echo "Files checksumms are correct : ${DownloadedSum}" >>${LogFile}
+	fi
+										        
 fi
 
 }
 
 ExtarctArchive() {
-echo "---> [ STEP 04 Archive extraction ]------------" >>$LogFile
-	if [ -s "$TmpDir/$DateDbDown" ]; then
-		cd $TmpDir
+echo "--->   [ STEP 06 Extracts the archive ${TmpDir}/${DateDbDown} to ${TmpDir} ]------------" >>${LogFile}
+	if [ -s "${TmpDir}/${DateDbDown}" ]; then
+		cd ${TmpDir}
 			if [ $? -ne 0 ]; then
-				echo "Unable to access the $TmpDir" >>$LogFile
-				exit 41
-			fi
-		echo "Extract archive files from : $DateDbDown in $TmpDir" >>$LogFile
-			$Unzip -j -o "$TmpDir/$DateDbDown">>$LogFile
-			if [ $? -ne 0 ] || [ ! -s "$DateDbDown" ]; then
-				echo "Unable to extract archive" >> $LogFile
-				exit 42
-			else
-				echo "---> [ STEP 04a Remove useless files to save some space on $RamDiskMountPoint ]------------"  >>$LogFile
-				IFS=, read -r -a array <<< "$FilesToDelete"
-				rm -v "${array[@]}" >>$LogFile
-				echo "---> [ STEP 04b Remaing files on $RamDiskMountPoint ]------------"  >>$LogFile
-				ls -lh $TmpDir>>$LogFile
+				echo "Unable to access the ${TmpDir}" >>${LogFile}
+				exit 62
 			fi
 
+			case ${FullModeLog} in
+			  	true)
+					$Unzip -j -o "${TmpDir}/${DateDbDown}">>$LogFile
+					if [ $? -ne 0 ] || [ ! -s "${DateDbDown}" ]; then
+						echo "Unable to extract archive" >> ${LogFile}
+						exit 64
+					else
+						echo "---> [ STEP 06a Remove useless files to save some space on ${TmpDir} ]------------"  >>${LogFile}
+						IFS=, read -r -a array <<< "${FilesToDelete}"
+						rm -v "${array[@]}" >>${LogFile}
+						echo "---> [ STEP 06b Remaining files on ${TmpDir} ]------------"  >>${LogFile}
+						ls -lh ${TmpDir}>>${LogFile}
+					fi
+				;;
+				false)
+					$Unzip -qq -j -o "${TmpDir}/${DateDbDown}">>${LogFile}
+					if [ $? -ne 0 ] || [ ! -s "${DateDbDown}" ]; then
+						echo "Unable to extract archive" >> ${LogFile}
+						exit 64
+					else
+						IFS=, read -r -a array <<< "${FilesToDelete}"
+						rm "${array[@]}" 
+					fi
+				;;
+				*)
+			  		echo "A strange parameter has been found... Exiting now" >>$LogFile
+			  		exit 63
+				;;
+			esac
+
+
 	else
-		echo -e "The Downloaded archive file $DateDbDown has not been found in $TmpDir\nExiting..." >>$LogFile
-		exit 43
+		echo -e "The Downloaded archive file ${DateDbDown} has not been found in ${TmpDir}\nExiting..." >>${LogFile}
+		exit 61
 	fi
 }
 
 SortingCleaningFiles() {
-echo "---> [ STEP 05 Transform all files, Ordering and Filtering ]------------" >>$LogFile
-MaxmindDownloadedDb="MaxMindDb.zip"
+echo "--->   [ STEP 07 Transform all files, Ordering and Filtering ]------------" >>$LogFile
 local MaxMindLocation="${TmpDir}/GeoLite2-Country-Locations-en.csv"
 local MaxMindIPv6Block="${TmpDir}/GeoLite2-Country-Blocks-IPv6.csv"
 local MaxMindIPv4Block="${TmpDir}/GeoLite2-Country-Blocks-IPv4.csv"
@@ -300,15 +372,15 @@ local FilteredIPv6List="${TmpDir}/Filtered_IPv6.csv"
 local FilteredIPv4List="${TmpDir}/Filtered_IPv4.csv"
 
 # Delete first line of each files as it describes the columns names.
-echo "Delete first line of file $MaxMindLocation" >>$LogFile
-sed -i '1d' $MaxMindLocation
-echo "Delete first line of file $MaxMindIPv6Block" >>$LogFile
-sed -i '1d' $MaxMindIPv6Block
-echo "Delete first line of file $MaxMindIPv4Block" >>$LogFile
-sed -i '1d' $MaxMindIPv4Block
+echo "Delete first line of file ${MaxMindLocation}" >>${LogFile}
+${Sed} -i '1d' ${MaxMindLocation}
+echo "Delete first line of file ${MaxMindIPv6Block}" >>${LogFile}
+${Sed} -i '1d' ${MaxMindIPv6Block}
+echo "Delete first line of file ${MaxMindIPv4Block}" >>${LogFile}
+${Sed} -i '1d' ${MaxMindIPv4Block}
 
-echo "join data from $MaxMindLocation and  $MaxMindIPv6Block to create $FilteredIPv6List" >>$LogFile
-join -t, -1 1 -2 2  <(cut -d, -f1,5 $MaxMindLocation) <(cut -d, -f1,2 $MaxMindIPv6Block | sort -t, -k2 -n) --nocheck-order | sort -t, -k2| cut -d, -f2,3>$FilteredIPv6List
+echo "join data from ${MaxMindLocation} and  ${MaxMindIPv6Block} to create ${FilteredIPv6List}" >>${LogFile}
+${Join} -t, -1 1 -2 2  <(${Cut} -d, -f1,5 $MaxMindLocation) <(${Cut} -d, -f1,2 $MaxMindIPv6Block | ${Sort} -t, -k2 -n) --nocheck-order | ${Sort} -t, -k2| ${Cut} -d, -f2,3>${FilteredIPv6List}
 echo "create each country file from $FilteredIPv6List" >>$LogFile
 while IFS=, read -r CountryCode Subnet ; do 
     echo "$Subnet" >> "$TmpDir/$CountryCode".nft6
@@ -323,7 +395,7 @@ done < $FilteredIPv4List
 }
 
 SelectCountriesList () {
-echo "---> [ STEP 06 Select list of countries ]------------" >>$LogFile
+echo "--->   [ STEP 08 Select list of countries ]------------" >>$LogFile
 DestDir=$TmpDir"/DestTempDir"
 mkdir -p $DestDir
 IFS=',' read -ra array <<<"$AllowedCountriesList"
@@ -339,7 +411,7 @@ for CountryCode in "${array[@]}"; do
 			;;
 		*)
 			echo "A strange parameter while copying ${TmpDir}/${CountryCode} files to ${DestDir}... Exiting now" >>$LogFile
-			exit 61 
+			exit 71 
 			;;
 	esac
 done
@@ -347,10 +419,9 @@ done
 }
 
 InsertCommas () {
-echo "---> [ STEP 07 Insert commas and join lines of files located in $DestDir ]------------" >>$LogFile
+echo "--->   [ STEP 09 Insert commas and join lines of files located in $DestDir ]------------" >>$LogFile
 shopt -s nullglob
-# create an array with all the filer/dir inside ~/myDir
-echo "---> [ STEP 07a modify IPv4 files ]------------" >>$LogFile
+echo "-----> [ STEP 09a modify IPv4 files ]------------" >>$LogFile
 # rm -v "$TmpDir"/*.nft4>>$LogFile
 rm "$TmpDir"/*.nft4
 Array=($DestDir/*.nft4)
@@ -364,7 +435,7 @@ for ((i=0; i<${#Array[@]}; i++)); do
 	sed -i -e '$a  }' "$TmpDir/$FileName"
 	sed -i -e 'N;s/\n//' "$TmpDir/$FileName"
 done
-echo "---> [ STEP 07b modify IPv6 files ]------------" >>$LogFile
+echo "-----> [ STEP 09b modify IPv6 files ]------------" >>$LogFile
 # rm -v "$TmpDir"/*.nft6>>$LogFile
 rm "$TmpDir"/*.nft6
 Array=($DestDir/*.nft6)
@@ -380,24 +451,38 @@ for ((i=0; i<${#Array[@]}; i++)); do
 #	rm -v ${Array[$i]} >>$LogFile
 done
 echo "Delete directory $DestDir and its content" >>$LogFile
-rm -rf $DestDir
+rm -rf ${DestDir}
 }
 
 ArchiveFiles () {
-DateArchiveFile="$(date +"%Y%m%d")-ScriptName-rulesets.tar.gz"
-cd $TmpDir
-echo "---> [ STEP 08 archive the following files in $DbDir/$DateArchiveFile ]------------" >>$LogFile
-if [ ! -d $DbDir ]; then 
-	mkdir -pv $DbDir >>$LogFile
-else 
-	echo "Directory $DbDir already exists">>$LogFile
-fi
-tar czvf $DbDir/$DateArchiveFile *.nft*>>$LogFile
+echo "--->   [ STEP 10 archive the generated files in $DbDir/$DateArchiveFile ]------------" >>${LogFile}
+DateArchiveFile="$(date +"%Y%m%d")-${ScriptName}-rulesets.tar.gz"
+cd ${TmpDir}
+case ${FullModeLog} in
+	true)
+		if [ ! -d ${DbDir} ]; then 
+			mkdir -pv ${DbDir} >>${LogFile}
+		else 
+			echo "Directory ${DbDir} already exists">>${LogFile}
+		fi
+		${TarGz} czvf ${DbDir}/${DateArchiveFile} *.nft*>>${LogFile}
+	;;
+	false)
+		if [ ! -d ${DbDir} ]; then 
+			mkdir -p ${DbDir} 
+		fi
+		${TarGz} czf $DbDir/$DateArchiveFile *.nft*
+	;;
+	*)
+	echo "A strange parameter has been found... Exiting now" >>$LogFile
+	exit 101
+	;;
+esac
 }
 
 PurgeSavedArchives ()
 	{
-echo "---> [ Purge Saved Archives in the directory : $DbDir ]------------" >>$LogFile
+echo "--->   [ Purge Saved Archives in the directory : $DbDir ]------------" >>$LogFile
 if [ -d $DbDir ]; then
 	echo "Directory content : ">>$LogFile
 	ls -lrth  $DbDir >>$LogFile
