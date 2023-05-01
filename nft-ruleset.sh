@@ -29,7 +29,7 @@ MaxMindKey="<Put_Your_Key_Here>"
 # Filename of this script.
 ScriptName=`basename "$0"`
 # Version number of this script.
-ScriptNameVersion="0.0.16"
+ScriptNameVersion="0.0.17"
 # Error log filename. This file logs errors in addition to the systemd Journal.
 LogFile="/var/log/$ScriptName.log"
 # Download URL.
@@ -72,19 +72,18 @@ echo "${ProgPath}"
              exit 11 
             ;;
     esac
-
  else
   echo "Unable to find ${ProgPath} or ${User} isn't allowed to launch it" >>${LogFile}
   exit 10
 fi
 }
+
 MkRamDrive ()
 {
 # This Function creates a RamDrive and requires 3 parameters : 
 # 1. The RamDrive Size
 # 2. The RamDrive Name
 # 3. The RamDrive MountPoint
-
 local Size=$1
 local RamDriveName=$2
 local RamDiskMountPoint=$3
@@ -127,19 +126,50 @@ local RamDiskMountPoint=$3
 	echo ${RamDiskMountPoint}
 }
 
-Checks () {
-#1. Check if log file alread exists, if not create it with current date and also checks at the same time that the script is allowed to create it.
-if [ ! -f $LogFile ]; then
-	echo "------------- [ Launch $ScriptName on $DateTime ]------------" >$LogFile
-	if [ ! $? -eq 0 ]; then
-		echo "Unable to create $LogFile"
-		exit 1
-	fi
-	else
-	echo "------------- [ On $DateTime $ScriptName has found an existing $LogFile, launch a rotate process ]------------" >>$LogFile
-	
-	#Put the LogRotate command here
-fi
+ChecksDirectory ()
+{
+local DirToCheckName=$1
+	case ${FullModeLog} in
+	true)
+		echo "-----> [ Checks on directory : ${DirToCheckName} ]------------">>${LogFile}
+		if [ ! -d ${DirToCheckName} ]; then 
+			${MkDir} -pv ${DirToCheckName}>>${LogFile}
+	       	fi
+		${Touch} ${DirToCheckName}/TstFile.out
+		if [ $? -eq 0 ]; then 
+			echo "${ScriptName} is able to write files in ${DirToCheckName}">>${LogFile} 
+		else
+			echo "${ScriptName} is unable to write files in ${DirToCheckName}">>${LogFile} 
+		fi
+		rm -v ${DirToCheckName}/TstFile.out >>${LogFile}
+		if [ $? -eq 0 ]; then 
+			echo "${ScriptName} is also able to delete files in ${DirToCheckName}">>${LogFile} 
+		else
+			echo "${ScriptName} is unable to delete files in ${DirToCheckName}">>${LogFile} 
+		fi
+	;;
+	false)
+		if [ ! -d ${DirToCheckName} ]; then 
+			${MkDir} -p ${DirToCheckName}
+	       	fi
+		${Touch} ${DirToCheckName}/TstFile.out
+		if [ $? -ne 0 ]; then 
+			echo "${ScriptName} is unable to write files in ${DirToCheckName}">>${LogFile}
+	       	fi
+		rm ${DirToCheckName}/TstFile.out
+		if [ $? -ne 0 ]; then 
+			echo "${ScriptName} is unable to delete files in ${DirToCheckName}">>${LogFile}
+	       	fi
+	;;
+	*)
+		echo "A strange parameter has been found... Exiting now" >>${LogFile}
+		exit 41
+	;;
+	esac
+}
+
+FirstChecks () 
+{
 echo "--->   [ STEP 01 Initial checks ]------------" >>${LogFile}
 #2. Checks if used programms are accessible with this user privilege
 Mount=$(CheckProgramm mount)
@@ -157,29 +187,16 @@ MkDir=$(CheckProgramm mkdir)
 MountPoint=$(CheckProgramm mountpoint)
 TarGz=$(CheckProgramm tar)
 NfTables=$(CheckProgramm nft)
-
+Touch=$(CheckProgramm touch)
 
 echo "--->   [ STEP 02 Creation of Temporary RamDrive to compute and download Files ]------------" >>${LogFile}
 #3 Create RamDisk
 RamDiskDir=$(MkRamDrive "250" "RamDriveTemp" "/tmp/RamDriveTemp")
 
-echo "--->   [ STEP 03 Creation of Temporary Directories and checks if script can write in them ]------------" >>${LogFile}
-#4 Checks if used directories exists if not create them 
 # Default temporary directory where this script ouptuts its working files.
 TmpDir="${RamDiskDir}"
-if [ -d ${TmpDir} ]; then
- touch ${TmpDir}/TstFile.out
- if [ $? -eq 0 ]; then echo "${ScriptName} is able to write files in ${TmpDir}" >> $LogFile; fi
- rm ${TmpDir}/TstFile.out
- if [ $? -eq 0 ]; then echo "${ScriptName} is also able to delete files in ${TmpDir}" >> ${LogFile}; fi
-fi
-# Default temporary directory where this script ouptuts its files that can be used at a later time.
-if [ -d ${DbDir} ]; then
- touch ${DbDir}/TstFile.out
- if [ $? -eq 0 ]; then echo "${ScriptName} is able to write files in ${DbDir}" >> ${LogFile}; fi
- rm ${DbDir}/TstFile.out
- if [ $? -eq 0 ]; then echo "${ScriptName} is also able to delete files in ${DbDir}" >> ${LogFile}; fi
-fi
+echo "--->   [ STEP 03 Creation of a ${TmpDir} and checks if script can write in ]------------" >>${LogFile}
+ChecksDirectory ${TmpDir}
 }
 
 Cleanup () {
@@ -197,7 +214,7 @@ cd /tmp
 		;;
 		false)
 			${UnMount} ${RamDiskDir}
-			if [ $? ! -eq 0 ]; then 
+			if [ $?  -ne 0 ]; then 
 				echo "unable to unmount the RamDisk from ${RamDiskDir}">> ${LogFile}; 
 			fi
 			rm -rf ${RamDiskDir} 
@@ -372,23 +389,26 @@ local FilteredIPv6List="${TmpDir}/Filtered_IPv6.csv"
 local FilteredIPv4List="${TmpDir}/Filtered_IPv4.csv"
 
 # Delete first line of each files as it describes the columns names.
-echo "Delete first line of file ${MaxMindLocation}" >>${LogFile}
+if ${FullModeLog};
+  then
+	echo "Delete first line of file ${MaxMindLocation}" >>${LogFile}
+	echo "Delete first line of file ${MaxMindIPv6Block}" >>${LogFile}
+	echo "Delete first line of file ${MaxMindIPv4Block}" >>${LogFile}
+fi
 ${Sed} -i '1d' ${MaxMindLocation}
-echo "Delete first line of file ${MaxMindIPv6Block}" >>${LogFile}
 ${Sed} -i '1d' ${MaxMindIPv6Block}
-echo "Delete first line of file ${MaxMindIPv4Block}" >>${LogFile}
 ${Sed} -i '1d' ${MaxMindIPv4Block}
 
-echo "join data from ${MaxMindLocation} and  ${MaxMindIPv6Block} to create ${FilteredIPv6List}" >>${LogFile}
+if ${FullModeLog}; then echo "join data from ${MaxMindLocation} and  ${MaxMindIPv6Block} to create ${FilteredIPv6List}" >>${LogFile}; fi
 ${Join} -t, -1 1 -2 2  <(${Cut} -d, -f1,5 $MaxMindLocation) <(${Cut} -d, -f1,2 $MaxMindIPv6Block | ${Sort} -t, -k2 -n) --nocheck-order | ${Sort} -t, -k2| ${Cut} -d, -f2,3>${FilteredIPv6List}
-echo "create each country file from $FilteredIPv6List" >>$LogFile
+if ${FullModeLog}; then echo "create each country file from $FilteredIPv6List" >>${LogFile}; fi
 while IFS=, read -r CountryCode Subnet ; do 
     echo "$Subnet" >> "$TmpDir/$CountryCode".nft6
 done < $FilteredIPv6List
 
-echo "join data from $MaxMindLocation and  $MaxMindIPv4Block to create $FilteredIPv4List" >>$LogFile
-join -t, -1 1 -2 2  <(cut -d, -f1,5 $MaxMindLocation) <(cut -d, -f1,2 $MaxMindIPv4Block | sort -t, -k2 -n) --nocheck-order | sort -t, -k2| cut -d, -f2,3>$FilteredIPv4List
-echo "create each country file from $FilteredIPv4List" >>$LogFile
+if ${FullModeLog}; then echo "join data from ${MaxMindLocation} and  ${MaxMindIPv4Block} to create ${FilteredIPv4List}">>${LogFile}; fi
+${Join} -t, -1 1 -2 2  <(${Cut} -d, -f1,5 ${MaxMindLocation}) <(${Cut} -d, -f1,2 ${MaxMindIPv4Block} | ${Sort} -t, -k2 -n) --nocheck-order | ${Sort} -t, -k2| ${Cut} -d, -f2,3>${FilteredIPv4List}
+if ${FullModeLog}; then echo "create each country file from ${FilteredIPv4List}" >>${LogFile}; fi
 while IFS=, read -r CountryCode Subnet ; do 
     echo "$Subnet" >> "$TmpDir/$CountryCode".nft4
 done < $FilteredIPv4List
@@ -396,8 +416,8 @@ done < $FilteredIPv4List
 
 SelectCountriesList () {
 echo "--->   [ STEP 08 Select list of countries ]------------" >>$LogFile
-DestDir=$TmpDir"/DestTempDir"
-mkdir -p $DestDir
+DestDir=${TmpDir}"/DestTempDir"
+ChecksDirectory ${DestDir}
 IFS=',' read -ra array <<<"$AllowedCountriesList"
 for CountryCode in "${array[@]}"; do
 	case ${FullModeLog} in
@@ -422,55 +442,56 @@ InsertCommas () {
 echo "--->   [ STEP 09 Insert commas and join lines of files located in $DestDir ]------------" >>$LogFile
 shopt -s nullglob
 echo "-----> [ STEP 09a modify IPv4 files ]------------" >>$LogFile
-# rm -v "$TmpDir"/*.nft4>>$LogFile
-rm "$TmpDir"/*.nft4
+if ${FullModeLog}; then 
+	rm -v "${TmpDir}"/*.nft4>>${LogFile}
+else
+	rm "${TmpDir}"/*.nft4
+fi
 Array=($DestDir/*.nft4)
 # iterate through array using a counter
 for ((i=0; i<${#Array[@]}; i++)); do
 	FileName=`basename ${Array[$i]}`
-    awk 'BEGIN{RS="";FS="\n";OFS=", "}{$1=$1}7' "${Array[$i]}" >"$TmpDir/$FileName"
-	Country=`echo $FileName | cut -d. -f1`
-	BeginOfFile="ipv4_"$Country" = {"
+    	awk 'BEGIN{RS="";FS="\n";OFS=", "}{$1=$1}7' "${Array[$i]}" >"$TmpDir/$FileName"
+	Country=`echo $FileName | ${Cut} -d. -f1`
+	BeginOfFile="define ipv4_"$Country" = {"
 	sed -i -e 's/^/'"$BeginOfFile"'\n/' "$TmpDir/$FileName"
 	sed -i -e '$a  }' "$TmpDir/$FileName"
 	sed -i -e 'N;s/\n//' "$TmpDir/$FileName"
 done
 echo "-----> [ STEP 09b modify IPv6 files ]------------" >>$LogFile
-# rm -v "$TmpDir"/*.nft6>>$LogFile
-rm "$TmpDir"/*.nft6
+if ${FullModeLog}; then 
+	rm -v "${TmpDir}"/*.nft6>>${LogFile}
+else
+	rm "${TmpDir}"/*.nft6
+fi
 Array=($DestDir/*.nft6)
 # iterate through array using a counter
 for ((i=0; i<${#Array[@]}; i++)); do
 	FileName=`basename ${Array[$i]}`
         awk 'BEGIN{RS="";FS="\n";OFS=", "}{$1=$1}7' "${Array[$i]}" >"$TmpDir/$FileName"
-	Country=`echo $FileName | cut -d. -f1`
-	BeginOfFile="ipv6_"$Country" = {"
+	Country=`echo $FileName | ${Cut} -d. -f1`
+	BeginOfFile="define ipv6_"$Country" = {"
 	sed -i -e 's/^/'"$BeginOfFile"'\n/' "$TmpDir/$FileName"
 	sed -i -e '$a  }' "$TmpDir/$FileName"
 	sed -i -e 'N;s/\n//' "$TmpDir/$FileName"
-#	rm -v ${Array[$i]} >>$LogFile
 done
-echo "Delete directory $DestDir and its content" >>$LogFile
-rm -rf ${DestDir}
+ if ${FullModeLog};
+	then
+	echo "Delete directory $DestDir and its content" >>${LogFile}
+	rm -rfv ${DestDir}>>${LogFile}
+ fi
 }
 
 ArchiveFiles () {
 echo "--->   [ STEP 10 archive the generated files in $DbDir/$DateArchiveFile ]------------" >>${LogFile}
 DateArchiveFile="$(date +"%Y%m%d")-${ScriptName}-rulesets.tar.gz"
+ChecksDirectory ${DbDir}
 cd ${TmpDir}
 case ${FullModeLog} in
 	true)
-		if [ ! -d ${DbDir} ]; then 
-			mkdir -pv ${DbDir} >>${LogFile}
-		else 
-			echo "Directory ${DbDir} already exists">>${LogFile}
-		fi
 		${TarGz} czvf ${DbDir}/${DateArchiveFile} *.nft*>>${LogFile}
 	;;
 	false)
-		if [ ! -d ${DbDir} ]; then 
-			mkdir -p ${DbDir} 
-		fi
 		${TarGz} czf $DbDir/$DateArchiveFile *.nft*
 	;;
 	*)
@@ -481,7 +502,7 @@ esac
 }
 
 PurgeSavedArchives ()
-	{
+{
 echo "--->   [ Purge Saved Archives in the directory : $DbDir ]------------" >>$LogFile
 if [ -d $DbDir ]; then
 	echo "Directory content : ">>$LogFile
@@ -492,11 +513,23 @@ else
 	echo "Directory ${DbDir} does not exists" >>$LogFile
 	exit 1
 fi
-	}
+}
 
-MainProg() {
+MainProg () 
+{
 # Start a timer for the script run time.
 local StartTime=$(date +%s)
+#1. Check if log file alread exists, if not create it with current date and also checks at the same time that the script is allowed to create it.
+if [ ! -f $LogFile ]; then
+	echo "------------- [ Launch $ScriptName on $DateTime ]------------" >$LogFile
+	if [ ! $? -eq 0 ]; then
+		echo "Unable to create $LogFile"
+		exit 1
+	fi
+	else
+	echo "------------- [ On $DateTime $ScriptName has found an existing $LogFile, launch a rotate process ]------------" >>$LogFile
+	#Put the LogRotate command here
+fi
 
 # Check parameters mentioned at script launch
 LFlag=false
@@ -518,13 +551,11 @@ Parameter="vpl:s:"
       LFlag=true;
       Lvalue=${OPTARG}
       LogLevel
- #     echo "loglevel ${Lvalue}"
      ;;
      s)
       SFlag=true;
       Svalue=${OPTARG}
       StageLevel
-#      echo "stage ${Svalue}"
      ;;
      \?|h)
       DisplayHelp
@@ -543,10 +574,8 @@ shift $(($OPTIND-1))
       then echo "The parameter 's' option requires a mandatory argument"
       exit 1
     fi
-										    
-
 #Run Checks procedure
-Checks
+FirstChecks
 #Run DownloadDb procedure (Download database if necesary) and extracts files if database exists
 DownloadDb
 # Checks the SHA256 sums of downloaded file and the one computed
@@ -566,5 +595,6 @@ Cleanup
 # Display the script run time.
 echo "Script run time : $(($(date +%s) - $StartTime))s">>$LogFile	
 }
+
 MainProg "$@"
 exit 0
