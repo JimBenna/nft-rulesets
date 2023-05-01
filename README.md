@@ -31,8 +31,8 @@ The script is at his first stage. It hasn't reached a number to be considered as
 
 In a near future I plan to add some new features, like the following ones :
 * Taking in consideration the parameters defined in a configuration file.
-* Taking in consideration command line arguments
-* Setup the nft rules.
+* Taking in consideration command line arguments. :white_check_mark:
+* Setup the nft rules. :white_check_mark:
 * And other ideas that will come when the script evolves.
 
 ## What do I expect from you :grey_question:
