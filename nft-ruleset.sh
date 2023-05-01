@@ -21,23 +21,28 @@
 # This selects the countries allowed by nftables afterward
 #
 AllowedCountriesList=(AT,AU,BE,CA,CH,DE,DK,ES,FI,FR,GB,IE,IS,IT,JP,LU,MC,NL,NO,PT,SE,US,VA)
+#
 # MaxMind License Key
-MaxMindKey="<Put_Your_Key_Here>"
+ MaxMindKey="<Put_Your_Key_Here>"
+#
+#-----------[ User may have to adapt the date format to his needs ]-----------
+#
+# Current date/time.
+#
+DateTime="$(date +"%d/%m/%Y %H:%M:%S")"
 #
 #-----------[ User should not modify anything below this line ]-----------
 #
 # Filename of this script.
 ScriptName=`basename "$0"`
 # Version number of this script.
-ScriptNameVersion="0.0.17"
+ScriptNameVersion="0.0.19"
 # Error log filename. This file logs errors in addition to the systemd Journal.
-LogFile="/var/log/$ScriptName.log"
+LogFile="/var/log/${ScriptName}.log"
 # Download URL.
 MaxMindDonwloadZipUrl="https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country-CSV&license_key=${MaxMindKey}&suffix=zip"
 #Checksum File
 MMCheckSumFile="https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country-CSV&license_key=${MaxMindKey}&suffix=zip.sha256"
-# Current date/time.
-DateTime="$(date +"%d/%m/%Y %H:%M:%S")"
 #
 # Files to remove once the archive has been extracted.
 FilesToDelete="COPYRIGHT.txt,LICENSE.txt,GeoLite2-Country-Locations-zh-CN.csv,GeoLite2-Country-Locations-fr.csv,GeoLite2-Country-Locations-es.csv,GeoLite2-Country-Locations-de.csv,GeoLite2-Country-Locations-pt-BR.csv,GeoLite2-Country-Locations-ja.csv,GeoLite2-Country-Locations-ru.csv"
@@ -134,6 +139,8 @@ local DirToCheckName=$1
 		echo "-----> [ Checks on directory : ${DirToCheckName} ]------------">>${LogFile}
 		if [ ! -d ${DirToCheckName} ]; then 
 			${MkDir} -pv ${DirToCheckName}>>${LogFile}
+		else
+			echo "${DirToCheckName} already exists">>${LogFile} 
 	       	fi
 		${Touch} ${DirToCheckName}/TstFile.out
 		if [ $? -eq 0 ]; then 
@@ -483,34 +490,51 @@ done
 }
 
 ArchiveFiles () {
-echo "--->   [ STEP 10 archive the generated files in $DbDir/$DateArchiveFile ]------------" >>${LogFile}
+echo "--->   [ STEP 10 Archive and Copy Files ]------------" >>${LogFile}
 DateArchiveFile="$(date +"%Y%m%d")-${ScriptName}-rulesets.tar.gz"
 ChecksDirectory ${DbDir}
 cd ${TmpDir}
 case ${FullModeLog} in
 	true)
+	echo "--->   [ STEP 10a archive the generated files in $DbDir/$DateArchiveFile ]------------" >>${LogFile}
 		${TarGz} czvf ${DbDir}/${DateArchiveFile} *.nft*>>${LogFile}
 	;;
 	false)
-		${TarGz} czf $DbDir/$DateArchiveFile *.nft*
+		${TarGz} czf ${DbDir}/${DateArchiveFile} *.nft*
 	;;
 	*)
-	echo "A strange parameter has been found... Exiting now" >>$LogFile
+	echo "A strange parameter has been found... Exiting now" >>${LogFile}
 	exit 101
 	;;
 esac
+NfTablesFilesDir="/etc/nftables.d"
+ChecksDirectory ${NfTablesFilesDir}
+case ${FullModeLog} in
+	true)
+	echo "--->   [ STEP 10b Copy the generated files ]------------" >>${LogFile}
+		cp -v ${TmpDir}/* ${NfTablesFilesDir}>>${LogFile}
+	;;
+	false)
+		cp ${TmpDir}/*.nft* ${NfTablesFilesDir}
+	;;
+	*)
+	echo "A strange parameter has been found... Exiting now" >>${LogFile}
+	exit 101
+	;;
+esac
+
 }
 
 PurgeSavedArchives ()
 {
-echo "--->   [ Purge Saved Archives in the directory : $DbDir ]------------" >>$LogFile
-if [ -d $DbDir ]; then
-	echo "Directory content : ">>$LogFile
-	ls -lrth  $DbDir >>$LogFile
-	rm -rfv $DbDir >>$LogFile
+echo "--->   [ Purge Saved Archives in the directory : ${DbDir} ]------------" >>${LogFile}
+if [ -d ${DbDir} ]; then
+	echo "Directory content : ">>${LogFile}
+	ls -lrth  ${DbDir} >>${LogFile}
+	rm -rfv ${DbDir} >>${LogFile}
 	exit 0
 else
-	echo "Directory ${DbDir} does not exists" >>$LogFile
+	echo "Directory ${DbDir} does not exists" >>${LogFile}
 	exit 1
 fi
 }
@@ -520,14 +544,14 @@ MainProg ()
 # Start a timer for the script run time.
 local StartTime=$(date +%s)
 #1. Check if log file alread exists, if not create it with current date and also checks at the same time that the script is allowed to create it.
-if [ ! -f $LogFile ]; then
-	echo "------------- [ Launch $ScriptName on $DateTime ]------------" >$LogFile
+if [ ! -f ${LogFile} ]; then
+	echo "------------- [ Launch ${ScriptName} on ${DateTime} ]------------" >${LogFile}
 	if [ ! $? -eq 0 ]; then
-		echo "Unable to create $LogFile"
+		echo "Unable to create ${LogFile}"
 		exit 1
 	fi
 	else
-	echo "------------- [ On $DateTime $ScriptName has found an existing $LogFile, launch a rotate process ]------------" >>$LogFile
+	echo "------------- [ On ${DateTime} ${ScriptName} has found an existing ${LogFile}. ]------------" >>${LogFile}
 	#Put the LogRotate command here
 fi
 
@@ -540,7 +564,7 @@ Parameter="vpl:s:"
   do
    case ${Options} in
      v)
-      echo "$(basename $0) version : $ScriptNameVersion"
+      echo "$(basename $0) version : ${ScriptNameVersion}"
       exit 0
      ;;
      p)
@@ -593,7 +617,7 @@ ArchiveFiles
 #Cleanup all the mess
 Cleanup
 # Display the script run time.
-echo "Script run time : $(($(date +%s) - $StartTime))s">>$LogFile	
+echo "Script run time : $(($(date +%s) - $StartTime))s">>${LogFile}	
 }
 
 MainProg "$@"
